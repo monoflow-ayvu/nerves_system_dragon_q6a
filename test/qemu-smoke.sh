@@ -97,7 +97,9 @@ mdir -i "${DISK_IMG}@@${ESP_OFFSET}" ::/EFI/BOOT/ || true
 # to 64 MiB in the work dir (the nix store copy may be a different size and
 # is read-only), and make a matching 64 MiB vars store.
 CODE="$WORK_DIR/edk2-code.fd"
-cp -f "$EDK2_CODE_FD" "$CODE"
+rm -f "$CODE"
+cp "$EDK2_CODE_FD" "$CODE"
+chmod u+w "$CODE"        # nix-store source is read-only; truncate needs write
 truncate -s 64M "$CODE"
 VARS="$WORK_DIR/edk2-vars.fd"
 truncate -s 64M "$VARS"   # fresh each run so grubenv/boot state is clean

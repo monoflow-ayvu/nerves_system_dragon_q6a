@@ -1,5 +1,9 @@
 import Config
 
+# Enable the Nerves integration with Mix (must run before any nerves_package
+# dependency is compiled).
+Application.start(:nerves_bootstrap)
+
 # Shoehorn starts the app after nerves_runtime.
 config :shoehorn, init: [:nerves_runtime]
 

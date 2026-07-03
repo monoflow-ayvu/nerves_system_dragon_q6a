@@ -1,5 +1,5 @@
 Resolving Hex dependencies...
-Resolution completed in 0.014s
+Resolution completed in 0.007s
 New:
   nerves_bootstrap 1.15.3
 * Getting nerves_bootstrap (Hex package)
@@ -29,55 +29,6 @@ Generated archive "nerves_bootstrap-1.15.3.ez" with MIX_ENV=prod
     │
     └─ mix.exs:6: Example.MixProject (module)
 
-Resolving Hex dependencies...
-Resolution completed in 0.542s
-New:
-  circular_buffer 1.0.1
-  elixir_make 0.10.0
-  interactive_cmd 0.1.4
-  jason 1.4.5
-  nerves 1.14.3
-  nerves_discovery 0.1.3
-  nerves_logging 0.2.4
-  nerves_runtime 0.13.13
-  nerves_system_br 1.34.0
-  nerves_toolchain_aarch64_nerves_linux_gnu 15.3.0
-  nerves_uevent 0.1.7
-  property_table 0.3.4
-  ring_logger 0.11.5
-  shoehorn 0.9.3
-  tablet 0.3.3
-  toolshed 0.5.0
-  uboot_env 1.0.2
-* Getting nerves (Hex package)
-* Getting shoehorn (Hex package)
-* Getting ring_logger (Hex package)
-* Getting toolshed (Hex package)
-* Getting nerves_runtime (Hex package)
-* Getting nerves_system_br (Hex package)
-* Getting nerves_toolchain_aarch64_nerves_linux_gnu (Hex package)
-* Getting nerves_logging (Hex package)
-* Getting nerves_uevent (Hex package)
-* Getting uboot_env (Hex package)
-* Getting elixir_make (Hex package)
-* Getting property_table (Hex package)
-* Getting circular_buffer (Hex package)
-* Getting interactive_cmd (Hex package)
-* Getting jason (Hex package)
-* Getting nerves_discovery (Hex package)
-* Getting tablet (Hex package)
-    warning: module attribute @all_targets was set but never used
-    │
-  6 │   @all_targets [:dragon_q6a]
-    │   ~~~~~~~~~~~~~~~~~~~~~~~~~~
-    │
-    └─ mix.exs:6: Example.MixProject (module)
-
-==> nerves_system_br
-Generated nerves_system_br app
-==> circular_buffer
-Compiling 1 file (.ex)
-Generated circular_buffer app
 ==> jason
 Compiling 10 files (.ex)
 Generated jason app
@@ -87,24 +38,9 @@ Generated tablet app
 ==> elixir_make
 Compiling 8 files (.ex)
 Generated elixir_make app
-==> nerves_logging
- CC kmsg_tailer.o
- LD kmsg_tailer
-Not crosscompiling. To test locally, the port binary needs extra permissions.
-Set SUDO=sudo to set permissions. The default is to skip this step.
-SUDO_ASKPASS=/usr/bin/ssh-askpass
-SUDO=true
-Compiling 5 files (.ex)
-Generated nerves_logging app
 ==> nerves_discovery
 Compiling 5 files (.ex)
 Generated nerves_discovery app
-==> ring_logger
-Compiling 7 files (.ex)
-Generated ring_logger app
-==> shoehorn
-Compiling 8 files (.ex)
-Generated shoehorn app
 ==> interactive_cmd
 Compiling 1 file (.ex)
 Generated interactive_cmd app
@@ -113,9 +49,64 @@ HOST_CC port.o
 HOST_LD port
 Compiling 50 files (.ex)
 Generated nerves app
+==> nerves_system_br
+Generated nerves_system_br app
 ==> nerves_toolchain_aarch64_nerves_linux_gnu
-could not compile dependency :nerves_toolchain_aarch64_nerves_linux_gnu, "mix compile" failed. Errors may have been logged above. You can recompile this dependency with "mix deps.compile nerves_toolchain_aarch64_nerves_linux_gnu --force", update it with "mix deps.update nerves_toolchain_aarch64_nerves_linux_gnu" or clean it with "mix deps.clean nerves_toolchain_aarch64_nerves_linux_gnu"
+Compiling 1 file (.ex)
+Generated nerves_toolchain_aarch64_nerves_linux_gnu app
+==> nerves_system_dragon_q6a
+Generated nerves_system_dragon_q6a app
 ==> example
-** (Mix) Compiling Nerves packages requires nerves_bootstrap to be started, which ought to
-happen in your generated `config.exs`. Please ensure that MIX_TARGET is set in your environment.
+
+Nerves environment
+  MIX_TARGET:   dragon_q6a
+  MIX_ENV:      dev
+
+==> circular_buffer
+Compiling 1 file (.ex)
+Generated circular_buffer app
+==> nerves_logging
+ CC kmsg_tailer.o
+ LD kmsg_tailer
+Compiling 5 files (.ex)
+Generated nerves_logging app
+==> ring_logger
+Compiling 7 files (.ex)
+Generated ring_logger app
+==> shoehorn
+Compiling 8 files (.ex)
+Generated shoehorn app
+==> uboot_env
+Compiling 5 files (.ex)
+Generated uboot_env app
+==> property_table
+Compiling 8 files (.ex)
+Generated property_table app
+==> nerves_uevent
+ CC uevent.o
+ LD uevent
+Compiling 5 files (.ex)
+Generated nerves_uevent app
+==> nerves_runtime
+Compiling 14 files (.ex)
+Generated nerves_runtime app
+==> toolshed
+Compiling 5 files (.ex)
+Generated toolshed app
+==> example
+Compiling 2 files (.ex)
+Generated example app
+|nerves| Building OTP Release...
+
+* [Nerves] validating vm.args
+* skipping runtime configuration (config/runtime.exs not found)
+* creating _build/dragon_q6a_dev/rel/example/releases/0.1.0/vm.args
+Updating base firmware image with Erlang release...
+Copying rootfs_overlay: /home/fermuch/Documents/Dev/AYVU/nerves_system_dragon_q6a/example/_build/dragon_q6a_dev/nerves/rootfs_overlay
+Building /home/fermuch/Documents/Dev/AYVU/nerves_system_dragon_q6a/example/_build/dragon_q6a_dev/nerves/images/example.fw...
+Firmware UUID: mimic-salute (89cbbb7d-885b-5392-0518-7b72f1a386ee)
+Firmware built successfully! 🎉
+
+Now you may install it to a MicroSD card using `mix burn` or upload it
+to a device with `mix upload` or `mix firmware.gen.script`+`./upload.sh`.
 
