@@ -22,7 +22,9 @@ let
     gptfdisk
     mtools
 
-    # for QEMU smoke tests (see README) run: nix-shell -p qemu
+    # QEMU smoke test (test/qemu-smoke.sh): qemu-system-aarch64 + EDK2
+    # aarch64 firmware ship together in the qemu package.
+    qemu
   ];
   PROJECT_ROOT = builtins.toString ./.;
 
@@ -36,7 +38,9 @@ let
 
     mix local.hex --force --if-missing
     mix local.rebar --force --if-missing
-    mix archive.install hex nerves_bootstrap --force
+    # Install nerves_bootstrap only if it's not already present, so repeated
+    # shell/direnv loads stay fast.
+    mix archive | grep -q nerves_bootstrap || mix archive.install hex nerves_bootstrap --force
   '';
 
 in mkShell {
