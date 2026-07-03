@@ -6,6 +6,7 @@ env:
   OTP_VERSION: 28.0.1
   ELIXIR_VERSION: 1.18.4-otp-28
   NERVES_BOOTSTRAP_VERSION: 1.13.1
+  FWUP_VERSION: 1.13.1  # matches Dockerfile; used by the qemu-smoke job
 
 permissions:
   id-token: write
@@ -56,8 +57,46 @@ jobs:
           elixir-version: ${{ env.ELIXIR_VERSION }}
           nerves-bootstrap-version: ${{ env.NERVES_BOOTSTRAP_VERSION }}
 
-  deploy-system:
+  qemu-smoke:
     needs: [build-system]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gridpoint-com/actions-nerves-system@v1
+      - uses: ./.actions/.internal/setup-beam-nerves
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          nerves-bootstrap-version: ${{ env.NERVES_BOOTSTRAP_VERSION }}
+      # Reuse the system built by build-system instead of rebuilding buildroot
+      # (~2h). Restore its deploy/system cache and drop the artifact into the
+      # Nerves cache so the example resolves the path dep locally.
+      - name: Restore built system artifact
+        uses: actions/cache/restore@v4
+        with:
+          path: deploy/system
+          key: deploy/system-${{ github.sha }}-${{ github.ref_name }}
+          fail-on-cache-miss: true
+      - name: Install prebuilt system into the Nerves artifact cache
+        run: |
+          mkdir -p ~/.nerves/artifacts
+          tar -xf deploy/system/artifacts/nerves_system_dragon_q6a-portable-*.tar.gz \
+            -C ~/.nerves/artifacts
+      - name: Install QEMU smoke-test tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-arm qemu-efi-aarch64 mtools
+          # fwup isn't in the Ubuntu repos; install the release .deb (same
+          # version the builder image uses).
+          curl -fsSL -o /tmp/fwup.deb \
+            https://github.com/fwup-home/fwup/releases/download/v${FWUP_VERSION}/fwup_${FWUP_VERSION}_amd64.deb
+          sudo apt-get install -y /tmp/fwup.deb
+      - name: QEMU boot smoke test
+        run: BOOT_TIMEOUT=300 EDK2_CODE=/usr/share/AAVMF/AAVMF_CODE.fd ./test/qemu-smoke.sh
+
+  deploy-system:
+    # Gate the release on a green build AND a successful QEMU boot.
+    needs: [build-system, qemu-smoke]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-22.04
     permissions:
