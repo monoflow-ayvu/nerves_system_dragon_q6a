@@ -36,11 +36,15 @@ let
     export LANG=en_US.UTF-8
     export ERL_AFLAGS="-kernel shell_history enabled"
 
-    mix local.hex --force --if-missing
-    mix local.rebar --force --if-missing
+    # Send all mix chatter to stderr. Under `direnv use nix`, stdout is captured
+    # to extract the environment and is closed once the env dump is read; a late
+    # write from mix (e.g. "Archives installed at: ...") would otherwise hit a
+    # closed pipe and crash with :epipe / :terminated.
+    mix local.hex --force --if-missing 1>&2
+    mix local.rebar --force --if-missing 1>&2
     # Install nerves_bootstrap only if it's not already present, so repeated
     # shell/direnv loads stay fast.
-    mix archive | grep -q nerves_bootstrap || mix archive.install hex nerves_bootstrap --force
+    mix archive | grep -q nerves_bootstrap || mix archive.install hex nerves_bootstrap --force 1>&2
   '';
 
 in mkShell {
