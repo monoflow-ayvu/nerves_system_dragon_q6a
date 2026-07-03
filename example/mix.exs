@@ -38,7 +38,7 @@ defmodule Example.MixProject do
 
       # The system under test.
       {:nerves_system_dragon_q6a,
-       path: "../", runtime: false, targets: :dragon_q6a, nerves: [compile: true]}
+       path: "../", runtime: false, targets: @all_targets, nerves: [compile: true]}
     ]
   end
 
