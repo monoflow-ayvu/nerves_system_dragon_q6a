@@ -1,398 +1,0 @@
-[*] Re-executing inside nix-shell (qemu, fwup, mtools)...
-[*] EDK2 firmware: /nix/store/25pgwccwnb65mpa4p6vjmwcizx872dv7-qemu-10.2.2/bin/../share/qemu/edk2-aarch64-code.fd
-[*] Firmware: example/_build/dragon_q6a_dev/nerves/images/example.fw
-[*] Assembling /home/fermuch/Documents/Dev/AYVU/nerves_system_dragon_q6a/test/work/disk.img (6144 MiB)...
-  0% [                                    ]  1% [                                    ] 196.61 KB in / 754.02 KB out       2% [                                    ] 655.36 KB in / 1.40 MB out       3% [=                                   ] 1.33 MB in / 2.09 MB out       4% [=                                   ] 2.02 MB in / 2.79 MB out       5% [=                                   ] 2.70 MB in / 3.48 MB out       6% [==                                  ] 3.18 MB in / 4.19 MB out       7% [==                                  ] 3.82 MB in / 4.87 MB out       8% [==                                  ] 4.51 MB in / 5.57 MB out       9% [===                                 ] 5.19 MB in / 6.27 MB out      10% [===                                 ] 5.88 MB in / 6.96 MB out      11% [===                                 ] 6.59 MB in / 7.66 MB out      12% [====                                ] 7.27 MB in / 8.35 MB out      13% [====                                ] 7.96 MB in / 9.05 MB out      14% [=====                               ] 8.65 MB in / 9.74 MB out      15% [=====                               ] 9.36 MB in / 10.44 MB out      16% [=====                               ] 10.04 MB in / 11.13 MB out      17% [======                              ] 10.73 MB in / 11.83 MB out      18% [======                              ] 11.42 MB in / 12.52 MB out      19% [======                              ] 12.11 MB in / 13.22 MB out      20% [=======                             ] 12.80 MB in / 13.91 MB out      21% [=======                             ] 13.48 MB in / 14.61 MB out      22% [=======                             ] 14.17 MB in / 15.30 MB out      23% [========                            ] 14.88 MB in / 16.01 MB out      24% [========                            ] 15.56 MB in / 16.70 MB out      25% [=========                           ] 16.25 MB in / 17.38 MB out      26% [=========                           ] 16.96 MB in / 18.09 MB out      27% [=========                           ] 17.65 MB in / 18.78 MB out      28% [==========                          ] 18.35 MB in / 19.48 MB out      29% [==========                          ] 19.04 MB in / 20.17 MB out      30% [==========                          ] 19.73 MB in / 20.86 MB out      31% [===========                         ] 20.40 MB in / 21.57 MB out      32% [===========                         ] 21.09 MB in / 22.27 MB out      33% [===========                         ] 21.77 MB in / 22.95 MB out      34% [============                        ] 22.46 MB in / 23.64 MB out      35% [============                        ] 23.17 MB in / 24.35 MB out      36% [============                        ] 23.86 MB in / 25.04 MB out      37% [=============                       ] 24.56 MB in / 25.74 MB out      38% [=============                       ] 25.25 MB in / 26.43 MB out      39% [==============                      ] 25.94 MB in / 27.12 MB out      40% [==============                      ] 26.64 MB in / 27.83 MB out      41% [==============                      ] 27.33 MB in / 28.51 MB out      42% [===============                     ] 28.02 MB in / 29.20 MB out      43% [===============                     ] 28.70 MB in / 29.91 MB out      44% [===============                     ] 29.39 MB in / 30.61 MB out      45% [================                    ] 30.08 MB in / 31.30 MB out      46% [================                    ] 30.77 MB in / 31.99 MB out      47% [================                    ] 31.39 MB in / 32.68 MB out      48% [=================                   ] 32.06 MB in / 33.38 MB out      49% [=================                   ] 32.75 MB in / 34.08 MB out      50% [==================                  ] 33.44 MB in / 34.77 MB out      51% [==================                  ] 34.13 MB in / 35.47 MB out      52% [==================                  ] 34.82 MB in / 36.16 MB out      53% [===================                 ] 35.52 MB in / 36.87 MB out      54% [===================                 ] 36.21 MB in / 37.56 MB out      55% [===================                 ] 36.88 MB in / 38.24 MB out      56% [====================                ] 37.58 MB in / 38.95 MB out      57% [====================                ] 38.27 MB in / 39.65 MB out      58% [====================                ] 38.96 MB in / 40.34 MB out      59% [=====================               ] 39.65 MB in / 41.03 MB out      60% [=====================               ] 40.34 MB in / 41.73 MB out      61% [=====================               ] 41.03 MB in / 42.42 MB out      62% [======================              ] 41.71 MB in / 43.11 MB out      63% [======================              ] 42.40 MB in / 43.81 MB out      64% [=======================             ] 43.11 MB in / 44.52 MB out      65% [=======================             ] 43.79 MB in / 45.21 MB out      66% [=======================             ] 44.48 MB in / 45.90 MB out      67% [========================            ] 45.17 MB in / 46.59 MB out      68% [========================            ] 45.86 MB in / 47.29 MB out      69% [========================            ] 46.55 MB in / 47.98 MB out      70% [=========================           ] 47.24 MB in / 48.69 MB out      71% [=========================           ] 47.92 MB in / 49.38 MB out      72% [=========================           ] 48.61 MB in / 50.07 MB out      73% [==========================          ] 49.30 MB in / 50.77 MB out      74% [==========================          ] 49.97 MB in / 51.46 MB out      75% [===========================         ] 50.68 MB in / 52.16 MB out      76% [===========================         ] 51.36 MB in / 52.85 MB out      77% [===========================         ] 52.05 MB in / 53.54 MB out      78% [============================        ] 52.76 MB in / 54.25 MB out      79% [============================        ] 53.44 MB in / 54.94 MB out      80% [============================        ] 54.13 MB in / 55.63 MB out      81% [=============================       ] 54.84 MB in / 56.33 MB out      82% [=============================       ] 55.53 MB in / 57.02 MB out      83% [=============================       ] 56.23 MB in / 57.72 MB out      84% [==============================      ] 56.92 MB in / 58.41 MB out      85% [==============================      ] 57.62 MB in / 59.12 MB out      86% [==============================      ] 58.31 MB in / 59.80 MB out      87% [===============================     ] 59.02 MB in / 60.51 MB out      88% [===============================     ] 59.70 MB in / 61.20 MB out      89% [================================    ] 60.39 MB in / 61.88 MB out      90% [================================    ] 61.10 MB in / 62.59 MB out      91% [================================    ] 61.78 MB in / 63.28 MB out      92% [=================================   ] 62.49 MB in / 63.98 MB out      93% [=================================   ] 63.13 MB in / 64.68 MB out      94% [=================================   ] 63.80 MB in / 65.36 MB out      95% [==================================  ] 64.50 MB in / 66.07 MB out      96% [==================================  ] 65.14 MB in / 66.76 MB out      97% [==================================  ] 65.83 MB in / 67.45 MB out      98% [=================================== ] 66.52 MB in / 68.14 MB out      99% [=================================== ] 67.21 MB in / 68.85 MB out     100% [====================================] 67.62 MB in / 69.53 MB out     
-Success!
-Elapsed time: 0.167 s
-[*] Overwriting /EFI/BOOT/grub.cfg on the ESP with the QEMU variant...
-[*] ESP contents:
- Volume in drive : has no label
- Volume Serial Number is 0022-0000
-Directory for ::/EFI/BOOT
-
-.            <DIR>     1980-01-01   0:00 
-..           <DIR>     1980-01-01   0:00 
-BOOTAA64 EFI    831488 1980-01-01   0:00 
-grub     cfg      1266 2107-12-31  21:00 
-grubenv           1024 1980-01-01   0:00 
-        5 files             833 778 bytes
-                         32 439 296 bytes free
-
-[*] Booting QEMU (timeout 220s). Serial -> /home/fermuch/Documents/Dev/AYVU/nerves_system_dragon_q6a/test/work/serial.log
-UEFI firmware (version edk2-stable202408-prebuilt.qemu.org built at 16:28:50 on Sep 12 2024)
-ArmTrngLib could not be correctly initialized.
-Error: Image at 000BFD66000 start failed: Not Found
-Error: Image at 000BFC8E000 start failed: Unsupported
-Error: Image at 000BFC13000 start failed: Not Found
-Tpm2SubmitCommand - Tcg2 - Not Found
-Tpm2GetCapabilityPcrs fail!
-Tpm2SubmitCommand - Tcg2 - Not Found
-[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01HBdsDxe: loading Boot0001 "UEFI Misc Device" from VenHw(837DCA9E-E874-4D82-B29A-23FE0E23D1E2,003E000A00000000)
-BdsDxe: starting Boot0001 "UEFI Misc Device" from VenHw(837DCA9E-E874-4D82-B29A-23FE0E23D1E2,003E000A00000000)
-Booting slot A (root PARTUUID=f784fad8-2d26-4df0-88a8-27864150c21b)...
-[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x000f0510]
-[    0.000000] Linux version 6.18.0 (buildroot@buildroot) (aarch64-nerves-linux-gnu-gcc (crosstool-NG UNKNOWN) 15.3.0, GNU ld (crosstool-NG UNKNOWN) 2.46.1) #1 SMP PREEMPT Mon Jun  8 20:20:00 UTC 2026
-[    0.000000] KASLR enabled
-[    0.000000] efi: EFI v2.7 by EDK II
-[    0.000000] efi: SMBIOS 3.0=0xbfed0000 MEMATTR=0xbe8b3018 ACPI 2.0=0xbcb43018 RNG=0xbcb43a18 MEMRESERVE=0xbcb40e98 
-[    0.000000] random: crng init done
-[    0.000000] ACPI: Early table checksum verification disabled
-[    0.000000] ACPI: RSDP 0x00000000BCB43018 000024 (v02 BOCHS )
-[    0.000000] ACPI: XSDT 0x00000000BCB43F18 000064 (v01 BOCHS  BXPC     00000001      01000013)
-[    0.000000] ACPI: FACP 0x00000000BCB43B18 000114 (v06 BOCHS  BXPC     00000001 BXPC 00000001)
-[    0.000000] ACPI: DSDT 0x00000000BCB41018 00151E (v02 BOCHS  BXPC     00000001 BXPC 00000001)
-[    0.000000] ACPI: APIC 0x00000000BCB43C98 00019C (v04 BOCHS  BXPC     00000001 BXPC 00000001)
-[    0.000000] ACPI: PPTT 0x00000000BCB43098 00009C (v02 BOCHS  BXPC     00000001 BXPC 00000001)
-[    0.000000] ACPI: GTDT 0x00000000BCB43818 000068 (v03 BOCHS  BXPC     00000001 BXPC 00000001)
-[    0.000000] ACPI: MCFG 0x00000000BCB43A98 00003C (v01 BOCHS  BXPC     00000001 BXPC 00000001)
-[    0.000000] ACPI: SPCR 0x00000000BCB43918 000050 (v02 BOCHS  BXPC     00000001 BXPC 00000001)
-[    0.000000] ACPI: DBG2 0x00000000BCB43998 000057 (v00 BOCHS  BXPC     00000001 BXPC 00000001)
-[    0.000000] ACPI: IORT 0x00000000BCB43198 000080 (v03 BOCHS  BXPC     00000001 BXPC 00000001)
-[    0.000000] ACPI: SPCR: console: pl011,mmio32,0x9000000,9600
-[    0.000000] earlycon: pl11 at MMIO32 0x0000000009000000 (options '9600')
-[    0.000000] printk: legacy bootconsole [pl11] enabled
-[    0.000000] NUMA: Faking a node at [mem 0x0000000040000000-0x00000000bfffffff]
-[    0.000000] NODE_DATA(0) allocated [mem 0xbfa58980-0xbfa5afff]
-[    0.000000] Zone ranges:
-[    0.000000]   DMA      [mem 0x0000000040000000-0x00000000bfffffff]
-[    0.000000]   DMA32    empty
-[    0.000000]   Normal   empty
-[    0.000000] Movable zone start for each node
-[    0.000000] Early memory node ranges
-[    0.000000]   node   0: [mem 0x0000000040000000-0x00000000bc76ffff]
-[    0.000000]   node   0: [mem 0x00000000bc770000-0x00000000bcb3ffff]
-[    0.000000]   node   0: [mem 0x00000000bcb40000-0x00000000bfe1ffff]
-[    0.000000]   node   0: [mem 0x00000000bfe20000-0x00000000bfeaffff]
-[    0.000000]   node   0: [mem 0x00000000bfeb0000-0x00000000bfebffff]
-[    0.000000]   node   0: [mem 0x00000000bfec0000-0x00000000bffdffff]
-[    0.000000]   node   0: [mem 0x00000000bffe0000-0x00000000bfffffff]
-[    0.000000] Initmem setup node 0 [mem 0x0000000040000000-0x00000000bfffffff]
-[    0.000000] cma: Reserved 512 MiB at 0x0000000084600000
-[    0.000000] psci: probing for conduit method from ACPI.
-[    0.000000] psci: PSCIv1.1 detected in firmware.
-[    0.000000] psci: Using standard PSCI v0.2 function IDs
-[    0.000000] psci: Trusted OS migration not required
-[    0.000000] psci: SMC Calling Convention v1.0
-[    0.000000] percpu: Embedded 25 pages/cpu s62488 r8192 d31720 u102400
-[    0.000000] Detected PIPT I-cache on CPU0
-[    0.000000] CPU features: detected: Address authentication (IMP DEF algorithm)
-[    0.000000] CPU features: detected: HCRX_EL2 register
-[    0.000000] CPU features: detected: Stage-1 Permission Indirection Extension (S1PIE)
-[    0.000000] CPU features: detected: 52-bit Virtual Addressing (LPA2)
-[    0.000000] CPU features: detected: Spectre-v4
-[    0.000000] alternatives: applying boot alternatives
-[    0.000000] Kernel command line: BOOT_IMAGE=(hd0,gpt2)/boot/Image root=PARTUUID=f784fad8-2d26-4df0-88a8-27864150c21b console=ttyAMA0,115200 earlycon loglevel=7 rootfstype=squashfs rootwait ro
-[    0.000000] printk: log buffer data + meta data: 131072 + 458752 = 589824 bytes
-[    0.000000] Dentry cache hash table entries: 262144 (order: 9, 2097152 bytes, linear)
-[    0.000000] Inode-cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
-[    0.000000] software IO TLB: SWIOTLB bounce buffer size adjusted to 2MB
-[    0.000000] software IO TLB: area num 4.
-[    0.000000] software IO TLB: mapped [mem 0x00000000bf3ed000-0x00000000bf5ed000] (2MB)
-[    0.000000] Fallback order for Node 0: 0 
-[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 524288
-[    0.000000] Policy zone: DMA
-[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
-[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=4, Nodes=1
-[    0.000000] rcu: Preemptible hierarchical RCU implementation.
-[    0.000000] rcu: 	RCU event tracing is enabled.
-[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=512 to nr_cpu_ids=4.
-[    0.000000] 	Trampoline variant of Tasks RCU enabled.
-[    0.000000] 	Tracing variant of Tasks RCU enabled.
-[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
-[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=4
-[    0.000000] RCU Tasks: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
-[    0.000000] RCU Tasks Trace: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
-[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
-[    0.000000] Root IRQ handler: gic_handle_irq
-[    0.000000] GICv2m: ACPI overriding V2M MSI_TYPER (base:80, num:64)
-[    0.000000] GICv2m: range[mem 0x08020000-0x08020fff], SPI[80:143]
-[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
-[    0.000000] arch_timer: cp15 timer running at 1000.00MHz (virt).
-[    0.000000] clocksource: arch_sys_counter: mask: 0x1fffffffffffffff max_cycles: 0x1cd42e4dffb, max_idle_ns: 881590591483 ns
-[    0.000044] sched_clock: 61 bits at 1000MHz, resolution 1ns, wraps every 4398046511103ns
-[    0.014696] Console: colour dummy device 80x25
-[    0.018418] ACPI: Core revision 20250807
-[    0.022568] Calibrating delay loop (skipped), value calculated using timer frequency.. 2000.00 BogoMIPS (lpj=4000000)
-[    0.023151] pid_max: default: 32768 minimum: 301
-[    0.025338] LSM: initializing lsm=capability
-[    0.027969] Mount-cache hash table entries: 4096 (order: 3, 32768 bytes, linear)
-[    0.028146] Mountpoint-cache hash table entries: 4096 (order: 3, 32768 bytes, linear)
-[    0.064437] rcu: Hierarchical SRCU implementation.
-[    0.064615] rcu: 	Max phase no-delay instances is 1000.
-[    0.065740] Timer migration: 1 hierarchy levels; 8 children per group; 1 crossnode level
-[    0.068689] Remapping and enabling EFI services.
-[    0.071903] smp: Bringing up secondary CPUs ...
-[    0.077498] Detected PIPT I-cache on CPU1
-[    0.080129] CPU1: Booted secondary processor 0x0000000001 [0x000f0510]
-[    0.084271] Detected PIPT I-cache on CPU2
-[    0.084519] CPU2: Booted secondary processor 0x0000000002 [0x000f0510]
-[    0.085947] Detected PIPT I-cache on CPU3
-[    0.086180] CPU3: Booted secondary processor 0x0000000003 [0x000f0510]
-[    0.086604] smp: Brought up 1 node, 4 CPUs
-[    0.087145] SMP: Total of 4 processors activated.
-[    0.087242] CPU: All CPU(s) started at EL1
-[    0.087486] CPU features: detected: Branch Target Identification
-[    0.087603] CPU features: detected: 32-bit EL0 Support
-[    0.087693] CPU features: detected: 32-bit EL1 Support
-[    0.087811] CPU features: detected: ARMv8.4 Translation Table Level
-[    0.087937] CPU features: detected: Instruction cache invalidation not required for I/D coherence
-[    0.088070] CPU features: detected: Data cache clean to the PoU not required for I/D coherence
-[    0.088218] CPU features: detected: Common not Private translations
-[    0.088310] CPU features: detected: CRC32 instructions
-[    0.088389] CPU features: detected: Data independent timing control (DIT)
-[    0.088511] CPU features: detected: E0PD
-[    0.088604] CPU features: detected: Enhanced Counter Virtualization
-[    0.088710] CPU features: detected: Enhanced Counter Virtualization (CNTPOFF)
-[    0.088843] CPU features: detected: Enhanced Privileged Access Never
-[    0.088947] CPU features: detected: Enhanced Virtualization Traps
-[    0.089038] CPU features: detected: Fine Grained Traps
-[    0.089117] CPU features: detected: Guarded Control Stack (GCS)
-[    0.089278] CPU features: detected: Generic authentication (IMP DEF algorithm)
-[    0.089547] CPU features: detected: RCpc load-acquire (LDAPR)
-[    0.089666] CPU features: detected: 52-bit Virtual Addressing for KVM (LPA2)
-[    0.089774] CPU features: detected: LSE atomic instructions
-[    0.089857] CPU features: detected: Memory Copy and Memory Set instructions
-[    0.089957] CPU features: detected: Privileged Access Never
-[    0.090068] CPU features: detected: PMUv3
-[    0.090151] CPU features: detected: SCTLR2
-[    0.090289] CPU features: detected: RAS Extension Support
-[    0.090477] CPU features: detected: RASv1p1 Extension Support
-[    0.090568] CPU features: detected: Random Number Generator
-[    0.090651] CPU features: detected: Speculation barrier (SB)
-[    0.090735] CPU features: detected: Stage-2 Force Write-Back
-[    0.090827] CPU features: detected: Trap EL0 IMPLEMENTATION DEFINED functionality
-[    0.090933] CPU features: detected: TLB range maintenance instructions
-[    0.091029] CPU features: detected: WFx with timeout
-[    0.091169] CPU features: detected: Scalable Matrix Extension
-[    0.091254] CPU features: detected: FA64
-[    0.091316] CPU features: detected: SME2
-[    0.091377] CPU features: detected: Speculative Store Bypassing Safe (SSBS)
-[    0.091477] CPU features: detected: Scalable Vector Extension
-[    0.100028] alternatives: applying system-wide alternatives
-[    0.115436] CPU features: detected: Hardware dirty bit management on CPU0-3
-[    0.116223] SVE: maximum available vector length 256 bytes per vector
-[    0.116371] SVE: default vector length 64 bytes per vector
-[    0.117203] SME: minimum available vector length 16 bytes per vector
-[    0.117316] SME: maximum available vector length 256 bytes per vector
-[    0.117416] SME: default vector length 32 bytes per vector
-[    0.128618] Memory: 1478380K/2097152K available (18240K kernel code, 5426K rwdata, 13084K rodata, 3264K init, 690K bss, 90044K reserved, 524288K cma-reserved)
-[    0.150304] devtmpfs: initialized
-[    0.167223] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
-[    0.168281] posixtimers hash table entries: 2048 (order: 3, 32768 bytes, linear)
-[    0.168837] futex hash table entries: 1024 (65536 bytes on 1 NUMA nodes, total 64 KiB, linear).
-[    0.175862] 2G module region forced by RANDOMIZE_MODULE_REGION_FULL
-[    0.176098] 0 pages in range for non-PLT usage
-[    0.176242] 514048 pages in range for PLT usage
-[    0.179360] pinctrl core: initialized pinctrl subsystem
-[    0.190573] SMBIOS 3.0.0 present.
-[    0.190797] DMI: QEMU QEMU Virtual Machine, BIOS edk2-stable202408-prebuilt.qemu.org 08/13/2024
-[    0.191063] DMI: Memory slots populated: 1/1
-[    0.207810] NET: Registered PF_NETLINK/PF_ROUTE protocol family
-[    0.217115] DMA: preallocated 256 KiB GFP_KERNEL pool for atomic allocations
-[    0.218112] DMA: preallocated 256 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
-[    0.219146] DMA: preallocated 256 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
-[    0.219449] audit: initializing netlink subsys (disabled)
-[    0.221170] audit: type=2000 audit(0.192:1): state=initialized audit_enabled=0 res=1
-[    0.225015] thermal_sys: Registered thermal governor 'step_wise'
-[    0.225053] thermal_sys: Registered thermal governor 'power_allocator'
-[    0.225502] cpuidle: using governor menu
-[    0.227093] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
-[    0.227870] ASID allocator initialised with 65536 entries
-[    0.233485] acpiphp: ACPI Hot Plug PCI Controller Driver version: 0.5
-[    0.235211] Serial: AMBA PL011 UART driver
-[    0.241085] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
-[    0.241308] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
-[    0.241424] HugeTLB: registered 32.0 MiB page size, pre-allocated 0 pages
-[    0.241524] HugeTLB: 0 KiB vmemmap can be freed for a 32.0 MiB page
-[    0.241618] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
-[    0.241717] HugeTLB: 0 KiB vmemmap can be freed for a 2.00 MiB page
-[    0.241817] HugeTLB: registered 64.0 KiB page size, pre-allocated 0 pages
-[    0.241917] HugeTLB: 0 KiB vmemmap can be freed for a 64.0 KiB page
-[    0.251342] ACPI: Added _OSI(Module Device)
-[    0.251451] ACPI: Added _OSI(Processor Device)
-[    0.251523] ACPI: Added _OSI(Processor Aggregator Device)
-[    0.272359] ACPI: 1 ACPI AML tables successfully acquired and loaded
-[    0.281859] ACPI: Interpreter enabled
-[    0.282121] ACPI: Using GIC for interrupt routing
-[    0.282936] ACPI: MCFG table detected, 1 entries
-[    0.324054] ACPI: CPU0 has been hot-added
-[    0.324847] ACPI: CPU1 has been hot-added
-[    0.325247] ACPI: CPU2 has been hot-added
-[    0.325659] ACPI: CPU3 has been hot-added
-[    0.333809] ARMH0011:00: ttyAMA0 at MMIO 0x9000000 (irq = 12, base_baud = 0) is a SBSA
-[    0.335550] printk: console [ttyAMA0] enabled
-[    0.335550] printk: console [ttyAMA0] enabled
-[    0.336373] printk: legacy bootconsole [pl11] disabled
-[    0.336373] printk: legacy bootconsole [pl11] disabled
-[    0.369857] ACPI: PCI: Interrupt link L000 configured for IRQ 35
-[    0.370277] ACPI: PCI: Interrupt link L001 configured for IRQ 36
-[    0.370391] ACPI: PCI: Interrupt link L002 configured for IRQ 37
-[    0.370489] ACPI: PCI: Interrupt link L003 configured for IRQ 38
-[    0.371066] ACPI: PCI Root Bridge [PCI0] (domain 0000 [bus 00-ff])
-[    0.372775] acpi PNP0A08:00: _OSC: OS supports [ExtendedConfig ASPM ClockPM Segments MSI HPX-Type3]
-[    0.378107] acpi PNP0A08:00: _OSC: platform does not support [LTR]
-[    0.379860] acpi PNP0A08:00: _OSC: OS now controls [PME AER PCIeCapability]
-[    0.383205] acpi PNP0A08:00: ECAM area [mem 0x4010000000-0x401fffffff] reserved by PNP0C02:00
-[    0.383601] acpi PNP0A08:00: ECAM at [mem 0x4010000000-0x401fffffff] for [bus 00-ff]
-[    0.384284] ACPI: Remapped I/O 0x000000003eff0000 to [io  0x0000-0xffff window]
-[    0.386817] PCI host bridge to bus 0000:00
-[    0.387333] pci_bus 0000:00: root bus resource [mem 0x10000000-0x3efeffff window]
-[    0.387395] pci_bus 0000:00: root bus resource [io  0x0000-0xffff window]
-[    0.387419] pci_bus 0000:00: root bus resource [mem 0x8000000000-0xffffffffff window]
-[    0.387503] pci_bus 0000:00: root bus resource [bus 00-ff]
-[    0.387536] PCI: OF: of_root node is NULL, cannot create PCI host bridge node
-[    0.388555] pci 0000:00:00.0: [1b36:0008] type 00 class 0x060000 conventional PCI endpoint
-[    0.392975] pci_bus 0000:00: resource 4 [mem 0x10000000-0x3efeffff window]
-[    0.393040] pci_bus 0000:00: resource 5 [io  0x0000-0xffff window]
-[    0.393062] pci_bus 0000:00: resource 6 [mem 0x8000000000-0xffffffffff window]
-[    0.401114] iommu: Default domain type: Translated
-[    0.401187] iommu: DMA domain TLB invalidation policy: strict mode
-[    0.403143] SCSI subsystem initialized
-[    0.404906] ACPI: bus type USB registered
-[    0.405444] usbcore: registered new interface driver usbfs
-[    0.405751] usbcore: registered new interface driver hub
-[    0.405923] usbcore: registered new device driver usb
-[    0.407323] pps_core: LinuxPPS API ver. 1 registered
-[    0.407384] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
-[    0.407471] PTP clock support registered
-[    0.407866] EDAC MC: Ver: 3.0.0
-[    0.409352] scmi_core: SCMI protocol bus registered
-[    0.412093] efivars: Registered efivars operations
-[    0.414711] FPGA manager framework
-[    0.424272] vgaarb: loaded
-[    0.426547] clocksource: Switched to clocksource arch_sys_counter
-[    0.428634] VFS: Disk quotas dquot_6.6.0
-[    0.428847] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
-[    0.431672] pnp: PnP ACPI init
-[    0.433677] system 00:00: [mem 0x4010000000-0x401fffffff window] could not be reserved
-[    0.433981] pnp: PnP ACPI: found 1 devices
-[    0.457189] NET: Registered PF_INET protocol family
-[    0.458177] IP idents hash table entries: 32768 (order: 6, 262144 bytes, linear)
-[    0.461853] tcp_listen_portaddr_hash hash table entries: 1024 (order: 2, 16384 bytes, linear)
-[    0.461957] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
-[    0.462021] TCP established hash table entries: 16384 (order: 5, 131072 bytes, linear)
-[    0.462400] TCP bind hash table entries: 16384 (order: 7, 524288 bytes, linear)
-[    0.462784] TCP: Hash tables configured (established 16384 bind 16384)
-[    0.463584] UDP hash table entries: 1024 (order: 4, 65536 bytes, linear)
-[    0.463853] UDP-Lite hash table entries: 1024 (order: 4, 65536 bytes, linear)
-[    0.464811] NET: Registered PF_UNIX/PF_LOCAL protocol family
-[    0.467413] RPC: Registered named UNIX socket transport module.
-[    0.467494] RPC: Registered udp transport module.
-[    0.467569] RPC: Registered tcp transport module.
-[    0.467585] RPC: Registered tcp-with-tls transport module.
-[    0.467599] RPC: Registered tcp NFSv4.1 backchannel transport module.
-[    0.467818] PCI: CLS 0 bytes, default 64
-[    0.472087] kvm [1]: HYP mode not available
-[    0.475529] Initialise system trusted keyrings
-[    0.476745] workingset: timestamp_bits=42 max_order=19 bucket_order=0
-[    0.478871] squashfs: version 4.0 (2009/01/31) Phillip Lougher
-[    0.480699] NFS: Registering the id_resolver key type
-[    0.480964] Key type id_resolver registered
-[    0.481018] Key type id_legacy registered
-[    0.481324] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
-[    0.481431] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
-[    0.482323] 9p: Installing v9fs 9p2000 file system support
-[    0.537771] Key type asymmetric registered
-[    0.537936] Asymmetric key parser 'x509' registered
-[    0.538797] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 241)
-[    0.539205] io scheduler mq-deadline registered
-[    0.539280] io scheduler kyber registered
-[    0.539633] io scheduler bfq registered
-[    0.554696] ledtrig-cpu: registered to indicate activity on CPUs
-[    0.562862] input: Power Button as /devices/LNXSYSTM:00/LNXSYBUS:00/PNP0C0C:00/input/input0
-[    0.564017] ACPI: button: Power Button [PWRB]
-[    0.632798] Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
-[    0.641548] msm_serial: driver initialized
-[    0.642175] SuperH (H)SCI(F) driver initialized
-[    0.642645] STM32 USART driver initialized
-[    0.666548] loop: module loaded
-[    0.667483] virtio_blk virtio1: 1/0/0 default/read/poll queues
-[    0.671862] virtio_blk virtio1: [vda] 12582912 512-byte logical blocks (6.44 GB/6.00 GiB)
-[    0.689939]  vda: vda1 vda2 vda3 vda4
-[    0.699860] megasas: 07.734.00.00-rc1
-[    0.714078] tun: Universal TUN/TAP device driver, 1.6
-[    0.722339] thunder_xcv, ver 1.0
-[    0.722525] thunder_bgx, ver 1.0
-[    0.722676] nicpf, ver 1.0
-[    0.725137] e1000: Intel(R) PRO/1000 Network Driver
-[    0.725183] e1000: Copyright (c) 1999-2006 Intel Corporation.
-[    0.725401] e1000e: Intel(R) PRO/1000 Network Driver
-[    0.725416] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
-[    0.725658] igb: Intel(R) Gigabit Ethernet Network Driver
-[    0.725675] igb: Copyright (c) 2007-2014 Intel Corporation.
-[    0.725847] igbvf: Intel(R) Gigabit Virtual Function Network Driver
-[    0.725862] igbvf: Copyright (c) 2009 - 2012 Intel Corporation.
-[    0.726875] sky2: driver version 1.30
-[    0.729875] VFIO - User Level meta-driver version: 0.3
-[    0.735419] usbcore: registered new interface driver usb-storage
-[    0.742654] rtc-efi rtc-efi.0: registered as rtc0
-[    0.743653] rtc-efi rtc-efi.0: setting system clock to 2026-07-03T11:41:04 UTC (1783078864)
-[    0.745209] i2c_dev: i2c /dev entries driver
-[    0.757182] sdhci: Secure Digital Host Controller Interface driver
-[    0.757306] sdhci: Copyright(c) Pierre Ossman
-[    0.758448] Synopsys Designware Multimedia Card Interface Driver
-[    0.759580] sdhci-pltfm: SDHCI platform and OF driver helper
-[    0.764021] pstore: Using crash dump compression: deflate
-[    0.764158] pstore: Registered efi_pstore as persistent store backend
-[    0.768197] usbcore: registered new interface driver usbhid
-[    0.768271] usbhid: USB HID core driver
-[    0.775423] hw perfevents: enabled with armv8_pmuv3_0 PMU driver, 7 (0,8000003f) counters available
-[    0.781171] NET: Registered PF_PACKET protocol family
-[    0.782175] 9pnet: Installing 9P2000 support
-[    0.782600] Key type dns_resolver registered
-[    0.809144] registered taskstats version 1
-[    0.810315] Loading compiled-in X.509 certificates
-[    0.836082] Demotion targets for Node 0: null
-[    0.843328] clk: Disabling unused clocks
-[    0.843714] PM: genpd: Disabling unused power domains
-[    0.847587] check access for rdinit=/init failed: -2, ignoring
-[    0.853990] VFS: Mounted root (squashfs filesystem) readonly on device 254:2.
-[    0.856675] devtmpfs: mounted
-[    1.166377] Freeing unused kernel memory: 3264K
-[    1.167526] Run /sbin/init as init process
-[    1.274863] EXT4-fs (vda4): VFS: Can't find ext4 filesystem
-[    1.278217] erlinit: Cannot mount /dev/rootdisk0p4 at /root: Invalid argument
-[    1.335109] erlinit: Unable to create seed directory
-[    1.503802] udevd[73]: starting version 3.2.14
-[    1.627154] udevd[73]: specified group 'fastrpc' unknown
-[    1.647666] udevd[74]: starting eudev-3.2.14
-[    2.435353] udevd[96]: failed to execute '/bin/setfacl' '/bin/setfacl -m g:fastrpc:rw /dev/dma_heap/system': No such file or directory
-[    7.976528] hrtimer: interrupt took 36436931 ns
-[   13.165600] nerves_heart: nerves_heart 2.5.0
-Erlang/OTP 28 [erts-16.4.0.2] [source] [64-bit] [smp:4:4] [ds:4:4:10] [async-threads:1] [jit]
-
-[33mwarning:[0m the :backends key for the :logger application is deprecated.
-Here is how to proceed:
-
-1. If you want to set it to [:console], simply remove the option.
-
-2. If you want to disable logging, remove :backends and instead set:
-
-    config :logger, :default_handler, false
-
-3. If you want to configure any other backend, then it is recommended
-   to add `{:logger_backends, "~> 1.0"}` as a dependency and call
-   `LoggerBackends.add(CustomBackend)` in your application start callback
-
-  (logger 1.19.5) lib/logger/app.ex:20: Logger.App.start/2
-  (kernel 10.6.3.2) application_master.erl:299: :application_master.start_it_old/4
-
-[   13.650712] udevd[74]: specified group 'fastrpc' unknown
-[   14.151326] udevd[154]: failed to execute '/bin/setfacl' '/bin/setfacl -m g:fastrpc:rw /dev/dma_heap/system': No such file or directory
-[   14.249981] EXT4-fs (vda4): mounted filesystem 3041e38d-615b-48d4-affb-a7787b5c4c39 r/w with ordered data mode. Quota mode: none.
-
-=== EXAMPLE APP UP: Dragon Q6A Nerves runtime is alive ===
-
-Interactive Elixir (1.19.5) - press Ctrl+C to exit (type h() ENTER for help)
-iex(1)> [   23.172704] nerves_heart: can't open '/dev/watchdog0'. Running without kernel watchdog: No such file or directory
-qemu-system-aarch64: terminating on signal 15 from pid 2266383 (timeout)
-
-==================== SMOKE TEST VERDICT ====================
-  [PASS] GRUB selected slot A
-  [PASS] Kernel booted (Linux banner)
-  [PASS] Reached userspace/erlinit
-  [PASS] Example app banner
-  [PASS] IEx console
-============================================================
-SMOKE TEST PASSED
