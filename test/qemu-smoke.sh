@@ -38,41 +38,24 @@ fi
 
 mkdir -p "$WORK_DIR"
 
-# --- Signal handling: make Ctrl-C actually stop the script --------------------
-# Long-lived children fight the tty for Ctrl-C: QEMU's -nographic stdio mux puts
-# the terminal in raw mode (Ctrl-C becomes a guest keypress), and the host BEAM
-# installs a break handler (the "BREAK: (a)bort" menu). Both swallow SIGINT so it
-# never reaches this script. We enable job control so each child runs in its own
-# process group, keep this script in the tty foreground, and on Ctrl-C tear the
-# whole child group down.
-set -m
-
-CHILD_PID=""
+# --- Signal handling ----------------------------------------------------------
+# The only step that used to swallow Ctrl-C was QEMU in -nographic mode: its
+# stdio mux puts the tty in raw mode, so Ctrl-C became a guest keypress. We now
+# boot QEMU with its serial redirected to a file (see below), so QEMU never
+# touches the tty, it stays in cooked mode, and Ctrl-C is a normal SIGINT that
+# terminates the foreground pipeline. This trap just tidies the background tail.
+#
+# (Do NOT run the build under job control / in a background process group: mix
+# and its Docker build_runner call tcsetattr on the tty, which raises SIGTTOU
+# and kills the job even on a normal, no-Ctrl-C run.)
 TAIL_PID=""
 _cleanup() {
-    if [ -n "$CHILD_PID" ]; then
-        kill -TERM "-$CHILD_PID" 2>/dev/null || true
-        sleep 0.2
-        kill -KILL "-$CHILD_PID" 2>/dev/null || true
-    fi
     [ -n "$TAIL_PID" ] && kill "$TAIL_PID" 2>/dev/null || true
-    CHILD_PID=""
     TAIL_PID=""
 }
 trap '_cleanup' EXIT
-trap 'echo; echo "[!] Interrupted - shutting down."; _cleanup; exit 130' INT
+trap '_cleanup; exit 130' INT
 trap '_cleanup; exit 143' TERM
-
-# Run "$@" in its own process group and wait for it, so tty signals hit this
-# script (which forwards them to the whole group) instead of the child.
-run() {
-    "$@" &
-    CHILD_PID=$!
-    local rc=0
-    wait "$CHILD_PID" || rc=$?
-    CHILD_PID=""
-    return "$rc"
-}
 
 # --- Locate the EDK2 aarch64 firmware -----------------------------------------
 find_edk2() {
@@ -102,8 +85,13 @@ echo "[*] EDK2 firmware: $EDK2_CODE_FD"
 FW="${1:-}"
 if [ -z "$FW" ]; then
     echo "[*] Building example/ for dragon_q6a (NERVES_CONSOLE=ttyAMA0)..."
-    run env MIX_TARGET=dragon_q6a NERVES_CONSOLE=ttyAMA0 REPO_DIR="$REPO_DIR" \
-        bash -c 'cd "$REPO_DIR/example" && mix deps.get && mix firmware'
+    (
+        cd "$REPO_DIR/example"
+        export MIX_TARGET=dragon_q6a
+        export NERVES_CONSOLE=ttyAMA0
+        mix deps.get
+        mix firmware
+    )
     FW="$REPO_DIR/example/_build/dragon_q6a_dev/nerves/images/example.fw"
 fi
 [ -f "$FW" ] || { echo "!! firmware not found: $FW" >&2; exit 1; }
@@ -147,8 +135,9 @@ TAIL_PID=$!
 set +e
 # -cpu max: userspace is compiled for cortex-a76 (ARMv8.2, LSE atomics);
 # QEMU's default cortex-a57/a72 is ARMv8.0 and would SIGILL in the BEAM.
-# Guest serial -> file (not -nographic stdio) so Ctrl-C stays with us.
-run timeout "${BOOT_TIMEOUT}" qemu-system-aarch64 \
+# Guest serial -> file (not -nographic stdio) so Ctrl-C stays with us. Run in
+# the foreground: with no tty attached, SIGINT terminates QEMU cleanly.
+timeout "${BOOT_TIMEOUT}" qemu-system-aarch64 \
     -M virt \
     -cpu max \
     -smp 4 \
