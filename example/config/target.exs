@@ -6,7 +6,4 @@ import Config
 ctty = System.get_env("NERVES_CONSOLE", "ttyMSM0")
 config :nerves, :erlinit, ctty: ctty
 
-# Mount the application partition read-write at /root (matches fwup.conf).
-config :nerves, :firmware, rootfs_overlay: "rootfs_overlay"
-
 config :logger, backends: [RingLogger]

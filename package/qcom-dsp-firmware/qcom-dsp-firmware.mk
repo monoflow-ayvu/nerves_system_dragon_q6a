@@ -19,6 +19,10 @@ QCOM_DSP_FIRMWARE_LICENSE = PROPRIETARY
 QCOM_DSP_FIRMWARE_REDISTRIBUTE = NO
 QCOM_DSP_FIRMWARE_INSTALL_STAGING = NO
 
+# cdsp.mbn/adsp.mbn are Hexagon firmware images; keep them out of the
+# target-architecture check for when the blobs are harvested in.
+QCOM_DSP_FIRMWARE_BIN_ARCH_EXCLUDE = /lib/firmware
+
 define QCOM_DSP_FIRMWARE_INSTALL_TARGET_CMDS
 	if find $(@D)/lib/firmware -type f \( -name '*.mbn' -o -name '*.mdt' \) 2>/dev/null | grep -q .; then \
 		cp -a $(@D)/lib $(TARGET_DIR)/ ; \

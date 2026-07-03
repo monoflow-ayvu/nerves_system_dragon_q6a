@@ -14,6 +14,11 @@ QCOM_DSP_SHELL_LICENSE = PROPRIETARY (Qualcomm redistributable blobs)
 QCOM_DSP_SHELL_REDISTRIBUTE = NO
 QCOM_DSP_SHELL_INSTALL_STAGING = NO
 
+# The shells and skels are Hexagon DSP6 ELFs (they run on the CDSP, not the
+# CPU). Exempt /usr/lib/dsp from Buildroot's target-architecture check,
+# which otherwise aborts with "architecture ... is QUALCOMM DSP6 Processor".
+QCOM_DSP_SHELL_BIN_ARCH_EXCLUDE = /usr/lib/dsp
+
 # Board-specific version directories inside the repo.
 QCOM_DSP_SHELL_CDSP_DIR = qcs6490/radxa/dragon-q6a/CDSP.HT.2.5.c4-00004-KODIAK-1
 QCOM_DSP_SHELL_ADSP_DIR = qcs6490/radxa/dragon-q6a/ADSP.HT.5.5.c9-00028-KODIAK-2

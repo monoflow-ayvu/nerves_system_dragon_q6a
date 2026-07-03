@@ -93,23 +93,28 @@ echo "[*] ESP contents:"
 mdir -i "${DISK_IMG}@@${ESP_OFFSET}" ::/EFI/BOOT/ || true
 
 # --- Boot under QEMU ----------------------------------------------------------
-# Writable copy of the EDK2 vars store.
+# aarch64 `-M virt` defines two 64 MiB flash banks. Pad the EDK2 code image
+# to 64 MiB in the work dir (the nix store copy may be a different size and
+# is read-only), and make a matching 64 MiB vars store.
+CODE="$WORK_DIR/edk2-code.fd"
+cp -f "$EDK2_CODE_FD" "$CODE"
+truncate -s 64M "$CODE"
 VARS="$WORK_DIR/edk2-vars.fd"
-if [ ! -f "$VARS" ]; then
-    truncate -s 64M "$VARS"
-fi
+truncate -s 64M "$VARS"   # fresh each run so grubenv/boot state is clean
 
 echo "[*] Booting QEMU (timeout ${BOOT_TIMEOUT}s). Serial -> $SERIAL_LOG"
 rm -f "$SERIAL_LOG"
 
 set +e
+# -cpu max: userspace is compiled for cortex-a76 (ARMv8.2, LSE atomics);
+# QEMU's default cortex-a57/a72 is ARMv8.0 and would SIGILL in the BEAM.
 timeout "${BOOT_TIMEOUT}" qemu-system-aarch64 \
     -M virt \
-    -cpu cortex-a72 \
+    -cpu max \
     -smp 4 \
     -m 2048 \
     -no-reboot \
-    -drive if=pflash,format=raw,file="$EDK2_CODE_FD",readonly=on \
+    -drive if=pflash,format=raw,file="$CODE",readonly=on \
     -drive if=pflash,format=raw,file="$VARS" \
     -drive file="$DISK_IMG",format=raw,if=none,id=hd0 \
     -device virtio-blk-device,drive=hd0 \
