@@ -47,12 +47,8 @@ jobs:
       - run: mkdir -p /home/runner/.ssh
       - uses: actions/checkout@v4
       - uses: gridpoint-com/actions-nerves-system@v1
-      # mix.exs uses the Docker build_runner with a custom image that isn't on
-      # any registry. Build it locally so the build_runner finds it via
-      # `docker image inspect` and skips the pull + interactive "create image?"
-      # prompt, which is fatal in CI.
-      - name: Build Nerves builder image
-        run: docker build -t fermuch/nerves-dragon-q6a-builder:latest -f Dockerfile .
+      # The Nerves Docker build_runner (mix.exs) pulls fermuch/nerves-dragon-q6a-builder
+      # from Docker Hub (public), same as nerves_system_sg2002 does with its image.
       - name: Build nerves_system
         uses: ./.actions/build-system
         with:
