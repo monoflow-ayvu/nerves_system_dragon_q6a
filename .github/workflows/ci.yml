@@ -79,9 +79,31 @@ jobs:
           fail-on-cache-miss: true
       - name: Install prebuilt system into the Nerves artifact cache
         run: |
-          mkdir -p ~/.nerves/artifacts
-          tar -xf deploy/system/artifacts/nerves_system_dragon_q6a-portable-*.tar.gz \
-            -C ~/.nerves/artifacts
+          set -euo pipefail
+          # Nerves resolves artifacts from $XDG_DATA_HOME/nerves/artifacts
+          # (~/.local/share/nerves/artifacts), and the dir name is
+          # <app>-portable-<version> WITHOUT the checksum that's in the tarball
+          # filename. Place it there under exactly that name so the example
+          # resolves the path dep locally (no download, no rebuild).
+          version="$(cat VERSION)"
+          expect="nerves_system_dragon_q6a-portable-${version}"
+          art_dir="${XDG_DATA_HOME:-$HOME/.local/share}/nerves/artifacts"
+          tarball="$(ls deploy/system/artifacts/nerves_system_dragon_q6a-portable-*.tar.gz)"
+          mkdir -p "$art_dir"
+          tmp="$(mktemp -d)"
+          tar -xf "$tarball" -C "$tmp"
+          rm -rf "${art_dir:?}/${expect}"
+          if [ "$(ls -1 "$tmp" | wc -l)" -eq 1 ]; then
+            mv "$tmp/$(ls -1 "$tmp")" "$art_dir/$expect"
+          else
+            mkdir -p "$art_dir/$expect"; mv "$tmp"/* "$art_dir/$expect/"
+          fi
+          test -d "$art_dir/$expect"
+          echo "Installed system artifact at $art_dir/$expect"
+          # Belt-and-suspenders: the Nerves Docker build_runner bind-mounts
+          # ~/.ssh; create it so a fallback build (should not happen) wouldn't
+          # die on a missing mount.
+          mkdir -p "$HOME/.ssh"
       - name: Install QEMU smoke-test tooling
         run: |
           sudo apt-get update
