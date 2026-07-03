@@ -1,0 +1,18 @@
+config BR2_PACKAGE_QCOM_DSP_SHELL
+	bool "qcom-dsp-shell"
+	depends on BR2_aarch64
+	help
+	  Hexagon DSP-side shell + skels for the Radxa Dragon Q6A, from the
+	  linux-msm/hexagon-dsp-binaries repo:
+
+	    CDSP: CDSP.HT.2.5.c4-00004-KODIAK-1 (fastrpc_shell_unsigned_3 + skels)
+	    ADSP: ADSP.HT.5.5.c9-00028-KODIAK-2 (fastrpc_shell_0 + skels)
+
+	  Installed flat into /usr/lib/dsp, which is where the FastRPC
+	  userspace looks (DSP_LIBRARY_PATH/ADSP_LIBRARY_PATH).
+
+	  IMPORTANT: the CDSP shell version string MUST match the cdsp.mbn
+	  installed by qcom-dsp-firmware, or FASTRPC_IOCTL_INIT_CREATE fails
+	  with 0x80000600. See GOAL.md frozen tuple.
+
+	  https://github.com/linux-msm/hexagon-dsp-binaries

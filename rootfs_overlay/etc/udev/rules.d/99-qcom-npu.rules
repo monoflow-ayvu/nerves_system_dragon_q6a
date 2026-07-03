@@ -1,0 +1,4 @@
+# Hexagon NPU / FastRPC device permissions (Radxa ships the same 0666 rules
+# on RadxaOS; without them only root can open the DSP nodes).
+SUBSYSTEM=="misc", KERNEL=="fastrpc-*", MODE="0666"
+SUBSYSTEM=="dma_heap", MODE="0666"

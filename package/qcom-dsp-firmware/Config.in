@@ -1,0 +1,20 @@
+config BR2_PACKAGE_QCOM_DSP_FIRMWARE
+	bool "qcom-dsp-firmware"
+	depends on BR2_aarch64
+	help
+	  Kernel-loaded Hexagon DSP firmware images (cdsp.mbn, adsp.mbn) for
+	  the Radxa Dragon Q6A, installed under /lib/firmware/qcom at the
+	  paths the DTB's remoteproc `firmware-name` properties point to:
+
+	    remoteproc_cdsp: qcom/qcs6490/cdsp.mbn
+	    remoteproc_adsp: qcom/qcs6490/radxa/dragon-q6a/adsp.mbn
+
+	  These signed blobs are NOT in any public package or in
+	  hexagon-dsp-binaries. They must be harvested from a stock RadxaOS
+	  install (Phase 0) and dropped into
+	  blobs/qcom-dsp-firmware/lib/firmware/... in this repo.
+
+	  If the blobs are absent the package installs nothing (the build
+	  still succeeds, e.g. for the QEMU smoke test), but the CDSP will
+	  NOT come up on real hardware until they are provided. See
+	  blobs/qcom-dsp-firmware/README.md.

@@ -1,0 +1,7 @@
+# Extra Busybox applets on top of nerves-common busybox.config.
+# qcom-coldplug.sh needs chmod/pidof; the rest are on-target NPU debugging
+# helpers (read-only rootfs makes reinstalling tools painful — bake them in).
+CONFIG_CHMOD=y
+CONFIG_PIDOF=y
+CONFIG_LSOF=y
+CONFIG_TIME=y

@@ -1,0 +1,140 @@
+# Kernel config fragment applied on top of the arm64 arch defconfig
+# (BR2_LINUX_KERNEL_USE_ARCH_DEFAULT_CONFIG). Two jobs:
+#
+#  1. Boot without initramfs: everything between reset and mounting the
+#     squashfs root on SD/UFS must be built-in (=y), and the whole
+#     FastRPC/remoteproc chain for the Hexagon NPU must be =y so no module
+#     loading is needed before the CDSP comes up.
+#  2. The same kernel must boot in QEMU (-M virt) for the smoke test, so
+#     virtio is built-in too.
+#
+# Cross-checked against the task doc (§5), meta-qcom kernel configs and the
+# RUBIK Pi 3 mainline porting guide (UFS m->y and friends).
+
+# --- Core Qualcomm platform (sc7280/qcs6490 family) ---
+CONFIG_ARCH_QCOM=y
+CONFIG_QCOM_SCM=y
+CONFIG_QCOM_COMMAND_DB=y
+CONFIG_QCOM_RPMH=y
+CONFIG_QCOM_RPMHPD=y
+CONFIG_REGULATOR_QCOM_RPMH=y
+CONFIG_QCOM_PDC=y
+CONFIG_PINCTRL_SC7280=y
+CONFIG_PINCTRL_QCOM_SPMI_PMIC=y
+CONFIG_SC_GCC_7280=y
+CONFIG_CLK_QCOM=y
+CONFIG_QCOM_CLK_RPMH=y
+CONFIG_QCOM_GDSC=y
+CONFIG_INTERCONNECT=y
+CONFIG_INTERCONNECT_QCOM=y
+CONFIG_INTERCONNECT_QCOM_SC7280=y
+CONFIG_QCOM_LLCC=y
+CONFIG_QCOM_OCMEM=y
+CONFIG_QCOM_AOSS_QMP=y
+CONFIG_QCOM_QFPROM=y
+CONFIG_NVMEM_QCOM_QFPROM=y
+CONFIG_QCOM_SOCINFO=y
+CONFIG_QCOM_STATS=y
+CONFIG_QCOM_WDT=y
+CONFIG_POWER_RESET_QCOM_PON=y
+CONFIG_QCOM_TSENS=y
+CONFIG_SPMI=y
+CONFIG_SPMI_MSM_PMIC_ARB=y
+CONFIG_MFD_SPMI_PMIC=y
+CONFIG_ARM_SMMU=y
+CONFIG_ARM_SMMU_QCOM=y
+
+# --- Serial console (GENI SE UART -> ttyMSM0) ---
+CONFIG_QCOM_GENI_SE=y
+CONFIG_SERIAL_QCOM_GENI=y
+CONFIG_SERIAL_QCOM_GENI_CONSOLE=y
+
+# --- remoteproc / GLINK / FastRPC (the point of this system) ---
+CONFIG_QCOM_SMEM=y
+CONFIG_QCOM_SMP2P=y
+CONFIG_QCOM_SMSM=y
+CONFIG_HWSPINLOCK=y
+CONFIG_HWSPINLOCK_QCOM=y
+CONFIG_MAILBOX=y
+CONFIG_QCOM_APCS_IPC=y
+CONFIG_QCOM_IPCC=y
+CONFIG_RPMSG=y
+CONFIG_RPMSG_CHAR=y
+CONFIG_RPMSG_CTRL=y
+CONFIG_RPMSG_QCOM_GLINK=y
+CONFIG_RPMSG_QCOM_GLINK_SMEM=y
+CONFIG_RPMSG_QCOM_SMD=y
+CONFIG_REMOTEPROC=y
+CONFIG_QCOM_RPROC_COMMON=y
+CONFIG_QCOM_PIL_INFO=y
+CONFIG_QCOM_Q6V5_COMMON=y
+CONFIG_QCOM_Q6V5_PAS=y
+CONFIG_QCOM_SYSMON=y
+CONFIG_QCOM_QMI_HELPERS=y
+CONFIG_QCOM_PDR_HELPERS=y
+# In-kernel protection-domain mapper (replaces the userspace pd-mapper
+# daemon; required for adsp/cdsp bring-up on 6.11+).
+CONFIG_QCOM_PD_MAPPER=y
+CONFIG_QCOM_FASTRPC=y
+
+# --- DMA-BUF heaps (FastRPC allocates from /dev/dma_heap/*) ---
+CONFIG_DMABUF_HEAPS=y
+CONFIG_DMABUF_HEAPS_SYSTEM=y
+CONFIG_DMABUF_HEAPS_CMA=y
+CONFIG_DMA_CMA=y
+CONFIG_CMA=y
+# FastRPC/QNN allocate DSP working buffers from the CMA dma_heap. Mainline
+# sc7280 fastrpc has no shared-dma-pool carveout (unlike the downstream
+# kernel behind the "no reserved DMA memory for FASTRPC" error-14001), so
+# the global CMA pool must be generous. Overridable at boot with cma=.
+CONFIG_CMA_SIZE_MBYTES=512
+
+# --- Storage: boot without initramfs ---
+# microSD (SDHCI MSM)
+CONFIG_MMC=y
+CONFIG_MMC_SDHCI=y
+CONFIG_MMC_SDHCI_PLTFM=y
+CONFIG_MMC_SDHCI_MSM=y
+# UFS (on-board storage; RUBIK Pi guide flips these m->y)
+CONFIG_SCSI=y
+CONFIG_BLK_DEV_SD=y
+CONFIG_SCSI_UFSHCD=y
+CONFIG_SCSI_UFSHCD_PLATFORM=y
+CONFIG_SCSI_UFS_QCOM=y
+CONFIG_PHY_QCOM_QMP=y
+CONFIG_PHY_QCOM_QMP_UFS=y
+
+# --- Filesystems ---
+CONFIG_SQUASHFS=y
+CONFIG_SQUASHFS_XZ=y
+CONFIG_SQUASHFS_ZSTD=y
+CONFIG_SQUASHFS_GZIP=y
+CONFIG_EXT4_FS=y
+CONFIG_VFAT_FS=y
+CONFIG_NLS_CODEPAGE_437=y
+CONFIG_NLS_ISO8859_1=y
+
+# --- EFI boot (GRUB hands off via the EFI stub) ---
+CONFIG_EFI=y
+CONFIG_EFI_STUB=y
+
+# --- QEMU (-M virt) smoke test support ---
+CONFIG_PCI=y
+CONFIG_PCI_HOST_GENERIC=y
+CONFIG_VIRTIO=y
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_MMIO=y
+CONFIG_VIRTIO_BLK=y
+CONFIG_VIRTIO_NET=y
+CONFIG_VIRTIO_CONSOLE=y
+CONFIG_HW_RANDOM_VIRTIO=y
+CONFIG_SERIAL_AMBA_PL011=y
+CONFIG_SERIAL_AMBA_PL011_CONSOLE=y
+CONFIG_RTC_DRV_PL031=y
+
+# --- Nerves runtime expectations ---
+CONFIG_WATCHDOG=y
+CONFIG_FW_LOADER=y
+CONFIG_FW_LOADER_COMPRESS=y
+CONFIG_FW_LOADER_COMPRESS_XZ=y
+CONFIG_FW_LOADER_COMPRESS_ZSTD=y

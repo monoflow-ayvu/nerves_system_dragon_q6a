@@ -1,0 +1,15 @@
+config BR2_PACKAGE_QAIRT_RUNTIME
+	bool "qairt-runtime"
+	depends on BR2_aarch64
+	help
+	  Qualcomm AI Engine Direct (QAIRT/QNN) runtime libraries for the
+	  HTP/Hexagon backend: libQnnHtp.so, libQnnHtpV68Stub.so,
+	  libQnnHtpV68Skel.so, libQnnSystem.so, qnn-platform-validator, etc.
+
+	  These come from the QAIRT SDK (aarch64-ubuntu-gcc variant), which
+	  requires a Qualcomm account to download. Drop the extracted host
+	  libs + V68 skels into blobs/qairt-runtime/ (see its README) before
+	  enabling this. Off by default — the FastRPC acceptance test
+	  (fastrpc_test -a v68) does not need it.
+
+	  https://www.qualcomm.com/developer  (Qualcomm AI Engine Direct SDK)

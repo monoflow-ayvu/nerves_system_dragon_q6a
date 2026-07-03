@@ -1,0 +1,6 @@
+/_build/
+/deps/
+/.nerves/
+/.elixir_ls/
+*.fw
+erl_crash.dump

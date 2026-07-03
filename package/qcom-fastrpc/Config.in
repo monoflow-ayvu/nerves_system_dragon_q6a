@@ -1,0 +1,17 @@
+config BR2_PACKAGE_QCOM_FASTRPC
+	bool "qcom-fastrpc"
+	depends on BR2_aarch64
+	depends on BR2_TOOLCHAIN_HAS_THREADS
+	select BR2_PACKAGE_LIBYAML
+	select BR2_PACKAGE_LIBBSD
+	help
+	  Qualcomm FastRPC userspace (qualcomm/fastrpc, built from source):
+	  libcdsprpc / libadsprpc shared libraries, the cdsprpcd /
+	  adsprpcd default-listener daemons and the fastrpc_test harness
+	  used by the acceptance test (fastrpc_test -a v68).
+
+	  This is only the CPU-side RPC transport. The DSP-side shell and
+	  skels come from qcom-dsp-shell, and the kernel-loaded DSP firmware
+	  from qcom-dsp-firmware.
+
+	  https://github.com/qualcomm/fastrpc

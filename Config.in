@@ -1,0 +1,15 @@
+# Project-specific packages for the Radxa Dragon Q6A (QCS6490) Nerves system.
+
+menu "Qualcomm Hexagon NPU stack"
+
+comment "Kernel-loaded DSP firmware and DSP-side shell (proprietary blobs)"
+source "$NERVES_DEFCONFIG_DIR/package/qcom-dsp-firmware/Config.in"
+source "$NERVES_DEFCONFIG_DIR/package/qcom-dsp-shell/Config.in"
+
+comment "FastRPC userspace (built from source)"
+source "$NERVES_DEFCONFIG_DIR/package/qcom-fastrpc/Config.in"
+
+comment "QAIRT / QNN runtime (proprietary SDK blobs, local dir)"
+source "$NERVES_DEFCONFIG_DIR/package/qairt-runtime/Config.in"
+
+endmenu

@@ -1,0 +1,9 @@
+_build/
+deps/
+.nix-mix/
+.nix-hex/
+*.fw
+*.img
+build*.log
+erl_crash.dump
+test/work/

@@ -1,0 +1,78 @@
+BR2_aarch64=y
+BR2_cortex_a76=y
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/nerves-project/toolchains/releases/download/v15.3.0/nerves_toolchain_aarch64_nerves_linux_gnu-linux_${shell uname -m}-15.3.0-8DAF9F3.tar.xz"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="aarch64-nerves-linux-gnu"
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_6_0=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_GLIBC=y
+# BR2_TOOLCHAIN_EXTERNAL_INET_RPC is not set
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+BR2_TOOLCHAIN_EXTERNAL_FORTRAN=y
+BR2_TOOLCHAIN_EXTERNAL_OPENMP=y
+BR2_TAR_OPTIONS="--no-same-owner"
+BR2_BACKUP_SITE="https://dl.nerves-project.org"
+BR2_ENABLE_DEBUG=y
+BR2_GLOBAL_PATCH_DIR="${BR2_EXTERNAL_NERVES_PATH}/patches ${NERVES_DEFCONFIG_DIR}/patches"
+BR2_REPRODUCIBLE=y
+BR2_ROOTFS_SKELETON_CUSTOM=y
+BR2_ROOTFS_SKELETON_CUSTOM_PATH="${BR2_EXTERNAL_NERVES_PATH}/board/nerves-common/skeleton"
+BR2_INIT_NONE=y
+BR2_ROOTFS_DEVICE_TABLE="${BR2_EXTERNAL_NERVES_PATH}/board/nerves-common/device_table.txt"
+# Dynamic /dev via eudev (udev) — BR2_INIT_NONE has no init, so udevd is
+# started by rootfs_overlay/usr/sbin/qcom-coldplug.sh (which also applies
+# the fastrpc/dma_heap permission rules and launches cdsprpcd).
+BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_EUDEV=y
+BR2_ENABLE_LOCALE_WHITELIST="locale-archive"
+BR2_GENERATE_LOCALE="en_US.UTF-8"
+BR2_ROOTFS_OVERLAY="${BR2_EXTERNAL_NERVES_PATH}/board/nerves-common/rootfs_overlay ${NERVES_DEFCONFIG_DIR}/rootfs_overlay"
+BR2_ROOTFS_POST_BUILD_SCRIPT="${NERVES_DEFCONFIG_DIR}/post-build.sh ${BR2_EXTERNAL_NERVES_PATH}/board/nerves-common/post-build.sh"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="${NERVES_DEFCONFIG_DIR}/post-createfs.sh"
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+# Frozen tuple (see GOAL.md): Deka-Embedded-Linux/linux-dragon-q6a, branch
+# dragon-q6a-v6.18 @ e05c4fa — mainline 6.18.0 + minimal Dragon Q6A patches
+# (eMMC/UFS enable, board DTS). Board file qcs6490-radxa-dragon-q6a.dts
+# includes mainline sc7280.dtsi, which carries the CDSP/ADSP remoteproc +
+# qcom,fastrpc glink nodes (compute-cb context banks, SMMU, dma-coherent).
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/Deka-Embedded-Linux/linux-dragon-q6a/archive/e05c4faeded00da418899bd7fb03be473ca18981.tar.gz"
+BR2_LINUX_KERNEL_USE_ARCH_DEFAULT_CONFIG=y
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="${NERVES_DEFCONFIG_DIR}/linux-dragon-q6a.fragment"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="qcom/qcs6490-radxa-dragon-q6a"
+BR2_LINUX_KERNEL_INSTALL_TARGET=y
+BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
+BR2_LINUX_KERNEL_NEEDS_HOST_LIBELF=y
+BR2_PACKAGE_BUSYBOX_CONFIG="${BR2_EXTERNAL_NERVES_PATH}/board/nerves-common/busybox.config"
+BR2_PACKAGE_BUSYBOX_CONFIG_FRAGMENT_FILES="${NERVES_DEFCONFIG_DIR}/busybox.fragment"
+BR2_PACKAGE_LIBMNL=y
+BR2_PACKAGE_LIBNL=y
+BR2_PACKAGE_E2FSPROGS=y
+BR2_PACKAGE_GPTFDISK=y
+BR2_PACKAGE_GPTFDISK_SGDISK=y
+# BR2_PACKAGE_E2FSPROGS_FSCK is not set
+BR2_PACKAGE_CA_CERTIFICATES=y
+# BR2_TARGET_ROOTFS_TAR is not set
+BR2_TARGET_GRUB2=y
+BR2_TARGET_GRUB2_BUILTIN_MODULES_EFI="boot linux fdt ext2 fat squash4 part_gpt part_msdos normal efi_gop loadenv echo test true search configfile regexp probe"
+BR2_PACKAGE_HOST_DOSFSTOOLS=y
+BR2_NERVES_SYSTEM_NAME="nerves_system_dragon_q6a"
+BR2_NERVES_ADDITIONAL_IMAGE_FILES="${NERVES_DEFCONFIG_DIR}/fwup.conf"
+
+# --- Qualcomm Hexagon NPU stack ---
+# Kernel-loaded DSP firmware (cdsp.mbn/adsp.mbn) + DSP-side shell binary.
+# The cdsp.mbn and fastrpc_shell_unsigned_3 version strings MUST match
+# (see GOAL.md frozen tuple).
+BR2_PACKAGE_QCOM_DSP_FIRMWARE=y
+BR2_PACKAGE_QCOM_DSP_SHELL=y
+# FastRPC userspace built from source (libcdsprpc/libadsprpc, cdsprpcd,
+# fastrpc_test).
+BR2_PACKAGE_QCOM_FASTRPC=y
+# QAIRT/QNN runtime blobs: off until the SDK blobs are dropped into blobs/
+# (requires a Qualcomm account; see package/qairt-runtime/Config.in).
+# BR2_PACKAGE_QAIRT_RUNTIME is not set
+BR2_PACKAGE_NBTTY=y
+BR2_PACKAGE_ERLANG_28=y
+BR2_PACKAGE_NERVES_CONFIG=y
+BR2_PACKAGE_NERVES_CONFIG_ACCEPT_RNG_NOTICE=y
