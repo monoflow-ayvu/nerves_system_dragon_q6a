@@ -28,4 +28,14 @@ QCOM_FASTRPC_CONF_OPTS = \
 	--with-udevrulesdir=/lib/udev/rules.d \
 	--with-systemdsystemunitdir=no
 
+# The package's own 60-fastrpc.rules ACLs the DSP nodes to a `fastrpc` group
+# via setfacl — both are systemd/sysusers/acl concepts absent on Nerves, so
+# udevd just logs errors. Drop them; rootfs_overlay/etc/udev/rules.d/
+# 99-qcom-npu.rules already sets the nodes 0666 (the RadxaOS approach).
+define QCOM_FASTRPC_REMOVE_SYSTEMD_BITS
+	rm -f $(TARGET_DIR)/lib/udev/rules.d/60-fastrpc.rules
+	rm -f $(TARGET_DIR)/usr/lib/sysusers.d/fastrpc.conf
+endef
+QCOM_FASTRPC_POST_INSTALL_TARGET_HOOKS += QCOM_FASTRPC_REMOVE_SYSTEMD_BITS
+
 $(eval $(autotools-package))

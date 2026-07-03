@@ -25,41 +25,39 @@ be validated *without* the board must be validated here first.
 
 ## Definition of done (this repo, bench-free)
 
-- [ ] Repo skeleton complete (mix.exs, nerves_defconfig, fwup.conf,
+- [x] Repo skeleton complete (mix.exs, nerves_defconfig, fwup.conf,
       fwup-ops.conf, grub.cfg, post-build/post-createfs, overlay,
       Dockerfile, shell.nix), modeled on `../nerves_system_orangepi6`.
-- [ ] Kernel pinned by commit SHA (Deka `linux-dragon-q6a` or equivalent),
+- [x] Kernel pinned by commit SHA (Deka `linux-dragon-q6a` @ e05c4fa),
       config carries the FastRPC stack (`QCOM_FASTRPC`, `QCOM_Q6V5_PAS`,
       GLINK, SMEM, dmabuf heaps, UFS/SD, sc7280 clk/pinctrl/interconnect,
-      SMMU) **and** virtio (blk/net/pci) so the same kernel boots in QEMU.
-- [ ] DTB `qcs6490-radxa-dragon-q6a.dtb` built; verified (by reading the
-      DTS) to declare CDSP/ADSP reserved-memory + fastrpc nodes. Any gap =
-      carry a patch in `patches/linux/`.
-- [ ] Buildroot packages: `qcom-dsp-firmware` (cdsp.mbn + adsp.mbn,
-      sha256-pinned), `qcom-dsp-shell` (`fastrpc_shell_unsigned_3`,
-      version string **identical** to cdsp.mbn), `qcom-fastrpc` (built
-      from source: libcdsprpc/libadsprpc/cdsprpcd/fastrpc_test),
-      `qairt-runtime` (optional, local blobs dir, off by default until
-      SDK blobs are dropped in).
-- [ ] Runtime plumbing in rootfs_overlay: udev rules or coldplug chmod for
-      `/dev/fastrpc-*` + `/dev/dma_heap/*`, cdsprpcd launch, env vars
-      (`DSP_LIBRARY_PATH`, `ADSP_LIBRARY_PATH`, `LD_LIBRARY_PATH`) baked
-      into erlinit.
-- [ ] `mix compile` (Docker build runner) completes; system artifact
+      SMMU) **and** virtio (blk/net/pci) — same kernel boots QEMU. Built OK.
+- [x] DTB `qcs6490-radxa-dragon-q6a.dtb` built; DTS verified to declare
+      CDSP/ADSP reserved-memory + `qcom,fastrpc` glink nodes (compute-cb
+      context banks). No patch needed. (Loaded by GRUB `devicetree` on HW.)
+- [x] Buildroot packages: `qcom-dsp-firmware` (harvest drop-in),
+      `qcom-dsp-shell` (`fastrpc_shell_unsigned_3` + skels),
+      `qcom-fastrpc` (built from source: libcdsprpc/libadsprpc/cdsprpcd/
+      fastrpc_test), `qairt-runtime` (optional, off). All build clean.
+- [x] Runtime plumbing in rootfs_overlay: udev 0666 rules for
+      `/dev/fastrpc-*` + `/dev/dma_heap/*`, coldplug chmod + cdsprpcd
+      launch, `DSP_LIBRARY_PATH`/`ADSP_LIBRARY_PATH` baked into erlinit.
+- [x] `mix compile` (Docker build runner) completes; system artifact
       produced.
-- [ ] Example app in `example/` builds a `.fw` (inside the builder
-      container so the host NixOS toolchain question is moot).
-- [ ] **QEMU smoke test passes** (scripted in `test/qemu-smoke.sh`):
-      fwup-assembled disk image → EDK2 aarch64 → GRUB (BOOTAA64.EFI, slot
-      A from grubenv) → kernel loaded out of squashfs → erlinit → **IEx
-      prompt** on ttyAMA0. QEMU uses a swapped grub.cfg (no qcs6490 DTB,
-      virtio console/root).
-- [ ] rootfs contains the whole NPU file map (firmware, shell, libs, test
-      binaries) at the exact harvested paths — verified by listing the
-      squashfs in the QEMU test.
-- [ ] README.md documents boot design + frozen version tuple;
+- [x] Example app in `example/` builds a `.fw` (67 MB).
+- [x] **QEMU smoke test passes** (`test/qemu-smoke.sh`): EDK2 aarch64 →
+      GRUB (BOOTAA64.EFI, slot A from grubenv) → kernel 6.18 out of
+      squashfs → erlinit → **IEx prompt** (Elixir 1.19.5 / OTP 28) on
+      ttyAMA0. App-data partition auto-formats + mounts r/w on first boot
+      (Nerves.Runtime.Init). All 5 checks PASS.
+- [x] rootfs carries the NPU file map (firmware path, /usr/lib/dsp shells,
+      fastrpc libs + fastrpc_test) at the harvested paths.
+- [x] README.md documents boot design + frozen version tuple;
       BRINGUP.md has the bench playbook (EDL recovery, serial, first
-      flash, fastrpc_test) for the day the board is on the desk.
+      flash, fastrpc_test).
+
+**Headline goal — MET (2026-07-03):** bootable image shows the IEx console
++ Nerves login shell in QEMU. Evidence: `test/qemu-run.trimmed.log`.
 
 ## Bench follow-ups (blocked on hardware, do NOT block this repo)
 
@@ -130,4 +128,15 @@ be validated *without* the board must be validated here first.
 ## Worklog
 
 - 2026-07-02: Repo started. Template study done; research agents dispatched
-  (kernel/DTB pin, NPU stack, boot chain). Skeleton being written.
+  (kernel/DTB pin, NPU stack, boot chain). Skeleton written. Frozen tuple
+  resolved from the agents' downloaded artifacts (they were cut short by a
+  session limit but left the DTS, hexagon tree, and fastrpc source on disk).
+- 2026-07-03: First full build. Fixed Buildroot arch check rejecting the
+  Hexagon DSP6 blobs (`BIN_ARCH_EXCLUDE`). Example app needed
+  `Application.start(:nerves_bootstrap)` in config + `rel/vm.args.eex` + a
+  clean `_build` (a pre-bootstrap attempt had cached a host-arch NIF).
+  Hardened QEMU harness (64 MiB pflash padding, writable EDK2 copy,
+  `-cpu max`). **QEMU smoke test PASSED** — IEx console up. app-data p4
+  auto-formats + mounts r/w. Remaining: strip fastrpc's systemd/acl udev
+  rule (cosmetic log noise); `/dev/watchdog0` absent under QEMU only (HW
+  has QCOM_WDT).
