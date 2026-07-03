@@ -38,6 +38,42 @@ fi
 
 mkdir -p "$WORK_DIR"
 
+# --- Signal handling: make Ctrl-C actually stop the script --------------------
+# Long-lived children fight the tty for Ctrl-C: QEMU's -nographic stdio mux puts
+# the terminal in raw mode (Ctrl-C becomes a guest keypress), and the host BEAM
+# installs a break handler (the "BREAK: (a)bort" menu). Both swallow SIGINT so it
+# never reaches this script. We enable job control so each child runs in its own
+# process group, keep this script in the tty foreground, and on Ctrl-C tear the
+# whole child group down.
+set -m
+
+CHILD_PID=""
+TAIL_PID=""
+_cleanup() {
+    if [ -n "$CHILD_PID" ]; then
+        kill -TERM "-$CHILD_PID" 2>/dev/null || true
+        sleep 0.2
+        kill -KILL "-$CHILD_PID" 2>/dev/null || true
+    fi
+    [ -n "$TAIL_PID" ] && kill "$TAIL_PID" 2>/dev/null || true
+    CHILD_PID=""
+    TAIL_PID=""
+}
+trap '_cleanup' EXIT
+trap 'echo; echo "[!] Interrupted - shutting down."; _cleanup; exit 130' INT
+trap '_cleanup; exit 143' TERM
+
+# Run "$@" in its own process group and wait for it, so tty signals hit this
+# script (which forwards them to the whole group) instead of the child.
+run() {
+    "$@" &
+    CHILD_PID=$!
+    local rc=0
+    wait "$CHILD_PID" || rc=$?
+    CHILD_PID=""
+    return "$rc"
+}
+
 # --- Locate the EDK2 aarch64 firmware -----------------------------------------
 find_edk2() {
     local c
@@ -66,13 +102,8 @@ echo "[*] EDK2 firmware: $EDK2_CODE_FD"
 FW="${1:-}"
 if [ -z "$FW" ]; then
     echo "[*] Building example/ for dragon_q6a (NERVES_CONSOLE=ttyAMA0)..."
-    (
-        cd "$REPO_DIR/example"
-        export MIX_TARGET=dragon_q6a
-        export NERVES_CONSOLE=ttyAMA0
-        mix deps.get
-        mix firmware
-    )
+    run env MIX_TARGET=dragon_q6a NERVES_CONSOLE=ttyAMA0 REPO_DIR="$REPO_DIR" \
+        bash -c 'cd "$REPO_DIR/example" && mix deps.get && mix firmware'
     FW="$REPO_DIR/example/_build/dragon_q6a_dev/nerves/images/example.fw"
 fi
 [ -f "$FW" ] || { echo "!! firmware not found: $FW" >&2; exit 1; }
@@ -105,12 +136,19 @@ VARS="$WORK_DIR/edk2-vars.fd"
 truncate -s 64M "$VARS"   # fresh each run so grubenv/boot state is clean
 
 echo "[*] Booting QEMU (timeout ${BOOT_TIMEOUT}s). Serial -> $SERIAL_LOG"
-rm -f "$SERIAL_LOG"
+: > "$SERIAL_LOG"
+
+# Stream the guest serial live without handing QEMU the controlling terminal, so
+# the tty stays in cooked mode and Ctrl-C raises SIGINT to this script (rather
+# than being captured by QEMU's -nographic stdio mux).
+tail -n +1 -f "$SERIAL_LOG" &
+TAIL_PID=$!
 
 set +e
 # -cpu max: userspace is compiled for cortex-a76 (ARMv8.2, LSE atomics);
 # QEMU's default cortex-a57/a72 is ARMv8.0 and would SIGILL in the BEAM.
-timeout "${BOOT_TIMEOUT}" qemu-system-aarch64 \
+# Guest serial -> file (not -nographic stdio) so Ctrl-C stays with us.
+run timeout "${BOOT_TIMEOUT}" qemu-system-aarch64 \
     -M virt \
     -cpu max \
     -smp 4 \
@@ -121,9 +159,15 @@ timeout "${BOOT_TIMEOUT}" qemu-system-aarch64 \
     -drive file="$DISK_IMG",format=raw,if=none,id=hd0 \
     -device virtio-blk-device,drive=hd0 \
     -netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-    -nographic \
-    2>&1 | tee "$SERIAL_LOG"
+    -display none \
+    -serial "file:$SERIAL_LOG" \
+    -monitor none \
+    </dev/null
 set -e
+
+kill "$TAIL_PID" 2>/dev/null || true
+TAIL_PID=""
+sleep 0.2   # let tail flush the final lines before the verdict grep
 
 # --- Verdict ------------------------------------------------------------------
 echo
