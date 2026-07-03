@@ -26,10 +26,15 @@ chmod 666 /dev/dma_heap/* 2>/dev/null || true
 # 3. FastRPC daemons. cdsprpcd keeps the CDSP FastRPC session alive
 #    (audio aDSP equivalent is adsprpcd; only start what's installed).
 #    They write nothing to the rootfs; logs go to the kernel ring buffer.
+#    The qualcomm/fastrpc build installs these under /usr/sbin, which isn't
+#    always on PATH this early, so probe explicit locations.
 for d in cdsprpcd adsprpcd; do
-    if command -v "$d" >/dev/null 2>&1 && ! pidof "$d" >/dev/null 2>&1; then
-        "$d" &
-    fi
+    for bin in "/usr/sbin/$d" "/usr/bin/$d"; do
+        if [ -x "$bin" ] && ! pidof "$d" >/dev/null 2>&1; then
+            "$bin" &
+            break
+        fi
+    done
 done
 
 exit 0
