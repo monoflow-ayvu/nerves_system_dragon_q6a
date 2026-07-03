@@ -1,8 +1,8 @@
-# GOAL — nerves_system_dragon_q6a
+# GOAL - nerves_system_dragon_q6a
 
 Standing goal for autonomous work sessions. Keep iterating until every
 "Definition of done (this repo, bench-free)" box is checked. Update the
-checkboxes and the Worklog as progress is made. Do not stop at plans —
+checkboxes and the Worklog as progress is made. Do not stop at plans -
 build, run, read the errors, fix, repeat.
 
 ## Mission
@@ -16,7 +16,7 @@ into BEAM-as-init.
 
 **Headline success (user-set, bench-free):** a firmware image that boots in
 QEMU and shows the **IEx console + Nerves login shell** over serial. This is
-the gate for this session — get the full UEFI→GRUB→kernel→erlinit→IEx chain
+the gate for this session - get the full UEFI→GRUB→kernel→erlinit→IEx chain
 green in emulation.
 
 Final on-board acceptance (needs the physical bench, §9 of the task doc):
@@ -31,7 +31,7 @@ be validated *without* the board must be validated here first.
 - [x] Kernel pinned by commit SHA (Deka `linux-dragon-q6a` @ e05c4fa),
       config carries the FastRPC stack (`QCOM_FASTRPC`, `QCOM_Q6V5_PAS`,
       GLINK, SMEM, dmabuf heaps, UFS/SD, sc7280 clk/pinctrl/interconnect,
-      SMMU) **and** virtio (blk/net/pci) — same kernel boots QEMU. Built OK.
+      SMMU) **and** virtio (blk/net/pci) - same kernel boots QEMU. Built OK.
 - [x] DTB `qcs6490-radxa-dragon-q6a.dtb` built; DTS verified to declare
       CDSP/ADSP reserved-memory + `qcom,fastrpc` glink nodes (compute-cb
       context banks). No patch needed. (Loaded by GRUB `devicetree` on HW.)
@@ -56,12 +56,12 @@ be validated *without* the board must be validated here first.
       BRINGUP.md has the bench playbook (EDL recovery, serial, first
       flash, fastrpc_test).
 
-**Headline goal — MET (2026-07-03):** bootable image shows the IEx console
+**Headline goal - MET (2026-07-03):** bootable image shows the IEx console
 + Nerves login shell in QEMU. Evidence: `test/qemu-run.trimmed.log`.
 
 ## Bench follow-ups (blocked on hardware, do NOT block this repo)
 
-- Phase 0 harvest from stock RadxaOS (known-good tuple archive) — until
+- Phase 0 harvest from stock RadxaOS (known-good tuple archive) - until
   then the tuple comes from linux-msm/hexagon-dsp-binaries + Olof's
   validated combination.
 - Real-board boot of the .fw, `fastrpc_test -a v68` PASS, A/B revert demo.
@@ -70,7 +70,7 @@ be validated *without* the board must be validated here first.
 ## Design decisions (record here as they're made)
 
 - **Template:** `nerves_system_orangepi6` (same author, aarch64 UEFI+GRUB
-  Nerves system, NPU blob packages, QEMU two-stage test) — much closer
+  Nerves system, NPU blob packages, QEMU two-stage test) - much closer
   than `nerves_system_x86_64_uefi`.
 - **Boot:** on-board Qualcomm UEFI → `\EFI\BOOT\BOOTAA64.EFI` (GRUB2
   arm64-efi from Buildroot) on ESP → `load_env` A/B slot select →
@@ -86,7 +86,7 @@ be validated *without* the board must be validated here first.
 - **Docker build runner** (host is NixOS): `Dockerfile` pins OTP 28 +
   Elixir to match `BR2_PACKAGE_ERLANG_28=y`.
 - **QEMU:** same kernel binary boots `-M virt` via virtio (config adds
-  virtio) — full-chain validation without the board.
+  virtio) - full-chain validation without the board.
 
 ## Frozen version tuple (update when anything moves)
 
@@ -98,14 +98,14 @@ be validated *without* the board must be validated here first.
 | Kernel | Deka `linux-dragon-q6a` branch `dragon-q6a-v6.18` @ `e05c4faeded00da418899bd7fb03be473ca18981` (mainline 6.18.0 + Dragon Q6A patches) |
 | DTB | `qcom/qcs6490-radxa-dragon-q6a` (in-tree; includes mainline `sc7280.dtsi`, carries CDSP/ADSP remoteproc + `qcom,fastrpc` glink nodes) |
 | DSP shell | linux-msm/hexagon-dsp-binaries @ `2ba83638…` → `qcs6490/radxa/dragon-q6a/CDSP.HT.2.5.c4-00004-KODIAK-1` (CDSP) + `ADSP.HT.5.5.c9-00028-KODIAK-2` (ADSP) |
-| cdsp.mbn / adsp.mbn | **Phase-0 harvest only** (NOT in hexagon-dsp-binaries — repo has no .mbn). Must match the CDSP shell version string above. |
+| cdsp.mbn / adsp.mbn | **Phase-0 harvest only** (NOT in hexagon-dsp-binaries - repo has no .mbn). Must match the CDSP shell version string above. |
 | fastrpc userspace | qualcomm/fastrpc branch `development` @ `706071caca54b9a56d78793c30d04351de5fbd96` (autotools; deps libyaml, libbsd) |
 | UEFI firmware (board-side, QSPI NOR) | record from bench boot log (Phase 0) |
 
 ### Research findings (2026-07-02, corroborated)
 
 - **Boot design validated by Armbian:** their `qcs6490` kernel family uses
-  the `grub-with-dtb` extension — GRUB on the ESP loads the kernel *and*
+  the `grub-with-dtb` extension - GRUB on the ESP loads the kernel *and*
   installs the DTB (`devicetree` command), `SERIALCON=ttyMSM0`. This is
   exactly our grub.cfg. Secure Boot must be off for GRUB's `devicetree`.
 - **Console:** board DTS `stdout-path = "serial0:115200n8"`, `serial0 =
@@ -114,7 +114,7 @@ be validated *without* the board must be validated here first.
   model (fastrpc node has `qcom,fastrpc-compute-cb` context banks,
   `dma-coherent`, `qcom,non-secure-domain`; no `shared-dma-pool`
   carveout). The downstream "no reserved DMA memory for FASTRPC"
-  error-14001 does not apply the same way — the fix here is ample global
+  error-14001 does not apply the same way - the fix here is ample global
   CMA (`CONFIG_CMA_SIZE_MBYTES=512`) feeding the CMA dma_heap. remoteproc
   nodes are enabled by the board DTS (`status="okay"`, firmware
   `qcom/qcs6490/cdsp.mbn`).
@@ -136,7 +136,7 @@ be validated *without* the board must be validated here first.
   `Application.start(:nerves_bootstrap)` in config + `rel/vm.args.eex` + a
   clean `_build` (a pre-bootstrap attempt had cached a host-arch NIF).
   Hardened QEMU harness (64 MiB pflash padding, writable EDK2 copy,
-  `-cpu max`). **QEMU smoke test PASSED** — IEx console up. app-data p4
+  `-cpu max`). **QEMU smoke test PASSED** - IEx console up. app-data p4
   auto-formats + mounts r/w. Remaining: strip fastrpc's systemd/acl udev
   rule (cosmetic log noise); `/dev/watchdog0` absent under QEMU only (HW
   has QCOM_WDT).

@@ -9,7 +9,7 @@ config BR2_PACKAGE_QAIRT_RUNTIME
 	  These come from the QAIRT SDK (aarch64-ubuntu-gcc variant), which
 	  requires a Qualcomm account to download. Drop the extracted host
 	  libs + V68 skels into blobs/qairt-runtime/ (see its README) before
-	  enabling this. Off by default — the FastRPC acceptance test
+	  enabling this. Off by default - the FastRPC acceptance test
 	  (fastrpc_test -a v68) does not need it.
 
 	  https://www.qualcomm.com/developer  (Qualcomm AI Engine Direct SDK)

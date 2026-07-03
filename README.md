@@ -1,4 +1,4 @@
-# Radxa Dragon Q6A — Nerves System
+# Radxa Dragon Q6A - Nerves System
 
 Custom [Nerves](https://nerves-project.org/) system for the
 [Radxa Dragon Q6A](https://docs.radxa.com/en/dragon/q6a) (Qualcomm
@@ -16,7 +16,7 @@ present and version-matched at first boot.
 | Storage | microSD / UFS / eMMC (same image; A/B + app data partition) |
 
 > Status: boot chain is QEMU-validated. On-board NPU validation
-> (`fastrpc_test -a v68`) is pending bench time and one blob harvest — see
+> (`fastrpc_test -a v68`) is pending bench time and one blob harvest - see
 > **NPU stack** and `BRINGUP.md`.
 
 ## Boot architecture
@@ -29,7 +29,7 @@ PBL (ROM) → XBL/XBL_SEC → Qualcomm UEFI → <EFI payload on ESP> → kernel
 ```
 
 We only replace the payload above UEFI. The UEFI firmware loads
-`\EFI\BOOT\BOOTAA64.EFI` from the ESP — that's **GRUB 2** (built by
+`\EFI\BOOT\BOOTAA64.EFI` from the ESP - that's **GRUB 2** (built by
 Buildroot for `arm64-efi`). GRUB:
 
 1. reads `/EFI/BOOT/grubenv` to select the active A/B slot,
@@ -48,7 +48,7 @@ This mirrors how **Armbian** boots the same board (its `qcs6490` kernel
 family uses `grub-with-dtb` and `SERIALCON=ttyMSM0`), and structurally
 follows `nerves_system_x86_64_uefi` / `nerves_system_orangepi6`
 (GRUB-on-ESP, A/B slots in `grubenv`, a u-boot-format KV block used only as
-a provisioning data store — no U-Boot involved).
+a provisioning data store - no U-Boot involved).
 
 **Secure Boot must be off** in the UEFI setup menu: GRUB disables its
 `devicetree` command under Secure Boot.
@@ -73,7 +73,7 @@ requires:
 | `qcom-dsp-firmware` | `cdsp.mbn` / `adsp.mbn` → `/lib/firmware/qcom/...` | **Phase-0 harvest** (see below) |
 | `qairt-runtime` | QNN/HTP libs (optional, off by default) | Qualcomm QAIRT SDK (local drop-in) |
 
-Runtime plumbing (no systemd on Nerves — `rootfs_overlay/`):
+Runtime plumbing (no systemd on Nerves - `rootfs_overlay/`):
 `qcom-coldplug.sh` (erlinit `--pre-run-exec`) starts udev, `chmod 0666`s
 `/dev/fastrpc-*` + `/dev/dma_heap/*` (also via `99-qcom-npu.rules`), and
 launches `cdsprpcd`. `DSP_LIBRARY_PATH`/`ADSP_LIBRARY_PATH=/usr/lib/dsp` are
@@ -134,7 +134,7 @@ GRUB → kernel → erlinit, and asserts it reaches the **IEx console**:
 It re-execs itself inside `nix-shell -p qemu fwup mtools` if those tools
 aren't on `PATH`. What it proves: UEFI+GRUB slot selection, squashfs kernel
 load, kernel→erlinit→BEAM→IEx. What it can't prove: the Hexagon DSP (no
-silicon under QEMU) — that's the bench acceptance test.
+silicon under QEMU) - that's the bench acceptance test.
 
 ## Recovery
 

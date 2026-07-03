@@ -1,8 +1,8 @@
-# BRINGUP.md — Dragon Q6A bench playbook
+# BRINGUP.md - Dragon Q6A bench playbook
 
 The log of what to do the day the board is on the desk. Everything here is
 blocked on hardware; the repo itself is validated in QEMU (see
-`test/qemu-smoke.sh`). Fill in the "Observed" blanks as you go — they feed
+`test/qemu-smoke.sh`). Fill in the "Observed" blanks as you go - they feed
 the frozen tuple in `GOAL.md`.
 
 ## 0. Serial console first
@@ -85,7 +85,7 @@ Expect: GRUB "Booting slot A" → kernel 6.18 → IEx on `ttyMSM0`.
 
 On a freshly flashed image, over serial, no manual setup:
 
-1. Reaches IEx (Nerves runtime up). ✅ already proven in QEMU.
+1. Reaches IEx (Nerves runtime up). Already proven in QEMU.
 2. `dmesg` shows `remoteproc ... cdsp.mbn ... remote processor cdsp is now up`
    and **no** `no reserved DMA memory for FASTRPC`.
 3. `/dev/fastrpc-cdsp` exists 0666; `cdsprpcd` running (`Example.npu_status()`).

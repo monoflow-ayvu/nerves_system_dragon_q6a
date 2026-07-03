@@ -22,14 +22,14 @@ QCOM_FASTRPC_DEPENDENCIES = host-pkgconf libyaml libbsd
 QCOM_FASTRPC_INSTALL_STAGING = YES
 
 # No systemd on Nerves; point the udev rules at the eudev dir and drop the
-# systemd unit. sysusers isn't available either — the fastrpc group is
+# systemd unit. sysusers isn't available either - the fastrpc group is
 # created (if needed) via the rootfs skeleton/coldplug instead.
 QCOM_FASTRPC_CONF_OPTS = \
 	--with-udevrulesdir=/lib/udev/rules.d \
 	--with-systemdsystemunitdir=no
 
 # The package's own 60-fastrpc.rules ACLs the DSP nodes to a `fastrpc` group
-# via setfacl — both are systemd/sysusers/acl concepts absent on Nerves, so
+# via setfacl - both are systemd/sysusers/acl concepts absent on Nerves, so
 # udevd just logs errors. Drop them; rootfs_overlay/etc/udev/rules.d/
 # 99-qcom-npu.rules already sets the nodes 0666 (the RadxaOS approach).
 define QCOM_FASTRPC_REMOVE_SYSTEMD_BITS

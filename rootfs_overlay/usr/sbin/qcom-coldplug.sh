@@ -4,7 +4,7 @@
 # erlinit.config via --pre-run-exec.
 #
 # Nerves uses BR2_INIT_NONE (no init system), so nothing else starts udevd,
-# coldplugs devices, or launches daemons — everything systemd/udev did on
+# coldplugs devices, or launches daemons - everything systemd/udev did on
 # RadxaOS happens here explicitly.
 
 set -e

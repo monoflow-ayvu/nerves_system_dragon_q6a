@@ -15,7 +15,7 @@ QAIRT_RUNTIME_LICENSE = PROPRIETARY
 QAIRT_RUNTIME_REDISTRIBUTE = NO
 QAIRT_RUNTIME_INSTALL_STAGING = NO
 
-# HTP V68 skels under /usr/lib/dsp are Hexagon ELFs — skip the arch check.
+# HTP V68 skels under /usr/lib/dsp are Hexagon ELFs - skip the arch check.
 QAIRT_RUNTIME_BIN_ARCH_EXCLUDE = /usr/lib/dsp
 
 define QAIRT_RUNTIME_INSTALL_TARGET_CMDS

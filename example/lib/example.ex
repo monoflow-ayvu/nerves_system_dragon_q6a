@@ -10,7 +10,7 @@ defmodule Example do
   def npu_status do
     IO.puts("== FastRPC device nodes ==")
     case Path.wildcard("/dev/fastrpc-*") do
-      [] -> IO.puts("  (none — expected under QEMU; real on hardware)")
+      [] -> IO.puts("  (none - expected under QEMU; real on hardware)")
       nodes -> Enum.each(nodes, &IO.puts("  #{&1}"))
     end
 

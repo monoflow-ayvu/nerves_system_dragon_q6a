@@ -141,6 +141,6 @@ echo "============================================================"
 if [ "$ok" -eq 0 ]; then
     echo "SMOKE TEST PASSED"
 else
-    echo "SMOKE TEST FAILED — inspect $SERIAL_LOG"
+    echo "SMOKE TEST FAILED - inspect $SERIAL_LOG"
 fi
 exit "$ok"
