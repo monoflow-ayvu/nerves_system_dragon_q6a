@@ -60,6 +60,11 @@ jobs:
   qemu-smoke:
     needs: [build-system]
     runs-on: ubuntu-22.04
+    # Force the Nerves download dir to a known path (default is XDG-dependent:
+    # $XDG_DATA_HOME/nerves/dl or ~/.nerves/dl). We seed the prebuilt tarball
+    # here so Nerves' resolver finds and caches it instead of rebuilding.
+    env:
+      NERVES_DL_DIR: /home/runner/nerves-dl
     steps:
       - uses: actions/checkout@v4
       - uses: gridpoint-com/actions-nerves-system@v1
@@ -69,41 +74,34 @@ jobs:
           elixir-version: ${{ env.ELIXIR_VERSION }}
           nerves-bootstrap-version: ${{ env.NERVES_BOOTSTRAP_VERSION }}
       # Reuse the system built by build-system instead of rebuilding buildroot
-      # (~2h). Restore its deploy/system cache and drop the artifact into the
-      # Nerves cache so the example resolves the path dep locally.
+      # (~2h). Restore its deploy/system cache; the tarball there is named with
+      # Nerves' download_name, so dropping it in NERVES_DL_DIR lets Nerves'
+      # artifact resolver validate it and populate its cache itself (it writes
+      # the CHECKSUM file that Cache.valid? checks).
       - name: Restore built system artifact
         uses: actions/cache/restore@v4
         with:
           path: deploy/system
           key: deploy/system-${{ github.sha }}-${{ github.ref_name }}
           fail-on-cache-miss: true
-      - name: Install prebuilt system into the Nerves artifact cache
+      - name: Seed prebuilt system into the Nerves download cache
         run: |
           set -euo pipefail
-          # Nerves resolves artifacts from $XDG_DATA_HOME/nerves/artifacts
-          # (~/.local/share/nerves/artifacts), and the dir name is
-          # <app>-portable-<version> WITHOUT the checksum that's in the tarball
-          # filename. Place it there under exactly that name so the example
-          # resolves the path dep locally (no download, no rebuild).
-          version="$(cat VERSION)"
-          expect="nerves_system_dragon_q6a-portable-${version}"
-          art_dir="${XDG_DATA_HOME:-$HOME/.local/share}/nerves/artifacts"
-          tarball="$(ls deploy/system/artifacts/nerves_system_dragon_q6a-portable-*.tar.gz)"
-          mkdir -p "$art_dir"
-          tmp="$(mktemp -d)"
-          tar -xf "$tarball" -C "$tmp"
-          rm -rf "${art_dir:?}/${expect}"
-          if [ "$(ls -1 "$tmp" | wc -l)" -eq 1 ]; then
-            mv "$tmp/$(ls -1 "$tmp")" "$art_dir/$expect"
-          else
-            mkdir -p "$art_dir/$expect"; mv "$tmp"/* "$art_dir/$expect/"
+          mkdir -p "$NERVES_DL_DIR" "$HOME/.ssh"
+          cp deploy/system/artifacts/nerves_system_dragon_q6a-portable-*.tar.gz "$NERVES_DL_DIR/"
+          ls -la "$NERVES_DL_DIR"
+      - name: Verify prebuilt resolves (fail fast instead of a 2h rebuild)
+        run: |
+          set -euo pipefail
+          cd example
+          export MIX_TARGET=dragon_q6a
+          mix deps.get
+          out="$(mix nerves.artifact.get 2>&1)"; echo "$out"
+          if echo "$out" | grep -qE "nerves_system_dragon_q6a not found|Starting Build|Trying to pull image"; then
+            echo "::error::Prebuilt system did not resolve from the seeded tarball; \
+          the smoke build would rebuild buildroot from source. Aborting."
+            exit 1
           fi
-          test -d "$art_dir/$expect"
-          echo "Installed system artifact at $art_dir/$expect"
-          # Belt-and-suspenders: the Nerves Docker build_runner bind-mounts
-          # ~/.ssh; create it so a fallback build (should not happen) wouldn't
-          # die on a missing mount.
-          mkdir -p "$HOME/.ssh"
       - name: Install QEMU smoke-test tooling
         run: |
           sudo apt-get update
