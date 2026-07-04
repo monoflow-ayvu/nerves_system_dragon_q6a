@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.0
+
+CI now boots the built system end-to-end in QEMU (UEFI → GRUB → kernel →
+erlinit → IEx) as a `qemu-smoke` job, and `deploy-system` is gated on it, so a
+tag only publishes if the system actually boots. No image or runtime changes
+since v0.1.1 — this release validates and exercises the full build → boot-test
+→ publish pipeline.
+
 ## v0.1.1
 
 Packaging fix so the system builds and publishes from a clean checkout.
