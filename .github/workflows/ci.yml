@@ -112,7 +112,10 @@ jobs:
             https://github.com/fwup-home/fwup/releases/download/v${FWUP_VERSION}/fwup_${FWUP_VERSION}_amd64.deb
           sudo apt-get install -y /tmp/fwup.deb
       - name: QEMU boot smoke test
-        run: BOOT_TIMEOUT=300 EDK2_CODE=/usr/share/AAVMF/AAVMF_CODE.fd ./test/qemu-smoke.sh
+        # Big cap, not a fixed wait: the script exits as soon as it sees the app
+        # + IEx. Emulated boot on a TCG runner is several times slower than on
+        # hardware (guest timekeeping is heavily distorted), so give it room.
+        run: BOOT_TIMEOUT=1200 EDK2_CODE=/usr/share/AAVMF/AAVMF_CODE.fd ./test/qemu-smoke.sh
 
   deploy-system:
     # Gate the release on a green build AND a successful QEMU boot.

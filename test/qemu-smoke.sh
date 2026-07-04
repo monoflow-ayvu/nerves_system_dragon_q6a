@@ -49,8 +49,11 @@ mkdir -p "$WORK_DIR"
 # and its Docker build_runner call tcsetattr on the tty, which raises SIGTTOU
 # and kills the job even on a normal, no-Ctrl-C run.)
 TAIL_PID=""
+QEMU_PID=""
 _cleanup() {
+    [ -n "$QEMU_PID" ] && kill "$QEMU_PID" 2>/dev/null || true
     [ -n "$TAIL_PID" ] && kill "$TAIL_PID" 2>/dev/null || true
+    QEMU_PID=""
     TAIL_PID=""
 }
 trap '_cleanup' EXIT
@@ -132,12 +135,11 @@ echo "[*] Booting QEMU (timeout ${BOOT_TIMEOUT}s). Serial -> $SERIAL_LOG"
 tail -n +1 -f "$SERIAL_LOG" &
 TAIL_PID=$!
 
-set +e
 # -cpu max: userspace is compiled for cortex-a76 (ARMv8.2, LSE atomics);
 # QEMU's default cortex-a57/a72 is ARMv8.0 and would SIGILL in the BEAM.
-# Guest serial -> file (not -nographic stdio) so Ctrl-C stays with us. Run in
-# the foreground: with no tty attached, SIGINT terminates QEMU cleanly.
-timeout "${BOOT_TIMEOUT}" qemu-system-aarch64 \
+# Guest serial -> file (not -nographic stdio), no tty attached, so backgrounding
+# QEMU is safe (no SIGTTOU) and Ctrl-C reaches this script as a normal SIGINT.
+qemu-system-aarch64 \
     -M virt \
     -cpu max \
     -smp 4 \
@@ -151,9 +153,31 @@ timeout "${BOOT_TIMEOUT}" qemu-system-aarch64 \
     -display none \
     -serial "file:$SERIAL_LOG" \
     -monitor none \
-    </dev/null
-set -e
+    </dev/null &
+QEMU_PID=$!
 
+# Stop as soon as the boot reaches the example app + IEx (the meaningful end
+# state), or at BOOT_TIMEOUT. QEMU never exits on its own once it hits IEx, so
+# without this the run would always burn the full timeout - and emulated boot on
+# a loaded CI runner (TCG, no KVM) is several times slower than on real hardware.
+waited=0
+while kill -0 "$QEMU_PID" 2>/dev/null; do
+    if grep -q "EXAMPLE APP UP" "$SERIAL_LOG" 2>/dev/null \
+       && grep -qE "Interactive Elixir|iex\(" "$SERIAL_LOG" 2>/dev/null; then
+        echo "[*] Boot reached the app + IEx after ~${waited}s; stopping QEMU."
+        break
+    fi
+    if [ "$waited" -ge "$BOOT_TIMEOUT" ]; then
+        echo "[*] BOOT_TIMEOUT (${BOOT_TIMEOUT}s) reached; stopping QEMU."
+        break
+    fi
+    sleep 2
+    waited=$((waited + 2))
+done
+
+kill "$QEMU_PID" 2>/dev/null || true
+wait "$QEMU_PID" 2>/dev/null || true
+QEMU_PID=""
 kill "$TAIL_PID" 2>/dev/null || true
 TAIL_PID=""
 sleep 0.2   # let tail flush the final lines before the verdict grep
