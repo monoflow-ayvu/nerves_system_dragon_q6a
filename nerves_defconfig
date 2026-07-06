@@ -69,9 +69,8 @@ BR2_PACKAGE_QCOM_DSP_SHELL=y
 # FastRPC userspace built from source (libcdsprpc/libadsprpc, cdsprpcd,
 # fastrpc_test).
 BR2_PACKAGE_QCOM_FASTRPC=y
-# QAIRT/QNN runtime blobs: off until the SDK blobs are dropped into blobs/
-# (requires a Qualcomm account; see package/qairt-runtime/Config.in).
-# BR2_PACKAGE_QAIRT_RUNTIME is not set
+# QAIRT/QNN runtime blobs (SDK 2.42.0.251225, see blobs/qairt-runtime/README.md)
+BR2_PACKAGE_QAIRT_RUNTIME=y
 BR2_PACKAGE_NBTTY=y
 BR2_PACKAGE_ERLANG_28=y
 BR2_PACKAGE_NERVES_CONFIG=y
