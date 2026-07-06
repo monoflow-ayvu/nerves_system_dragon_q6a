@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.0
+
+Added the QAIRT runtime for using the TPU.
+
 ## v0.2.0
 
 CI now boots the built system end-to-end in QEMU (UEFI → GRUB → kernel →
