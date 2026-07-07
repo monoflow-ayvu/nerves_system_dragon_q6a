@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.4
+
+- **QEMU tests: `-cpu cortex-a76` instead of `-cpu max`** (overridable
+  via `QEMU_CPU`). QEMU 8.2 on ubuntu-24.04 aborts with `-cpu max`
+  booting kernel 6.18 ("regime_is_user: code should not be reached"
+  when the kernel enables hardware dirty-bit management). cortex-a76
+  matches the real target and boots fine on QEMU 8.2 and 10.x — this
+  is what killed the v0.5.3 release run.
+
 ## v0.5.3
 
 - **Fix A/B bookkeeping never running on-target** (caught by the first

@@ -135,13 +135,16 @@ echo "[*] Booting QEMU (timeout ${BOOT_TIMEOUT}s). Serial -> $SERIAL_LOG"
 tail -n +1 -f "$SERIAL_LOG" &
 TAIL_PID=$!
 
-# -cpu max: userspace is compiled for cortex-a76 (ARMv8.2, LSE atomics);
-# QEMU's default cortex-a57/a72 is ARMv8.0 and would SIGILL in the BEAM.
+# -cpu cortex-a76: matches the real target (ARMv8.2, LSE atomics); QEMU's
+# default cortex-a57/a72 is ARMv8.0 and would SIGILL in the BEAM. Do NOT use
+# -cpu max: QEMU 8.2 (ubuntu-24.04) aborts on it with kernel 6.18
+# ("regime_is_user: code should not be reached" once the kernel enables
+# hardware dirty-bit management).
 # Guest serial -> file (not -nographic stdio), no tty attached, so backgrounding
 # QEMU is safe (no SIGTTOU) and Ctrl-C reaches this script as a normal SIGINT.
 qemu-system-aarch64 \
     -M virt \
-    -cpu max \
+    -cpu "${QEMU_CPU:-cortex-a76}" \
     -smp 4 \
     -m 2048 \
     -no-reboot \

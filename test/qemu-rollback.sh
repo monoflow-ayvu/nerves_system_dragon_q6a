@@ -98,7 +98,7 @@ boot_qemu() {
     tail -n +1 -f "$SERIAL_LOG" &
     TAIL_PID=$!
     qemu-system-aarch64 \
-        -M virt -cpu max -smp 4 -m 2048 -no-reboot \
+        -M virt -cpu "${QEMU_CPU:-cortex-a76}" -smp 4 -m 2048 -no-reboot \
         -drive if=pflash,format=raw,file="$CODE",readonly=on \
         -drive if=pflash,format=raw,file="$VARS" \
         -drive file="$DISK_IMG",format=raw,if=none,id=hd0 \
