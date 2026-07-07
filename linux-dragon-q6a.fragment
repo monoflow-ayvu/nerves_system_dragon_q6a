@@ -138,3 +138,100 @@ CONFIG_FW_LOADER=y
 CONFIG_FW_LOADER_COMPRESS=y
 CONFIG_FW_LOADER_COMPRESS_XZ=y
 CONFIG_FW_LOADER_COMPRESS_ZSTD=y
+
+# ============================================================
+# Board peripherals (cross-checked against the pinned DTS,
+# qcs6490-radxa-dragon-q6a.dts @ e05c4fa). Headless-critical
+# hardware is =y; media/audio is =m (loaded by udev coldplug).
+# ============================================================
+
+# --- PCIe (pcie0: RTL8111 GbE, pcie1: M.2 NVMe) ---
+CONFIG_PCIE_QCOM=y
+CONFIG_PHY_QCOM_QMP_PCIE=y
+
+# --- Ethernet: Realtek RTL8111 on pcie0 (arch defconfig has =m) ---
+CONFIG_R8169=y
+
+# --- NVMe on the M.2 M-key slot ---
+CONFIG_BLK_DEV_NVME=y
+
+# --- USB host: usb_1 (USB3 + DP combo phy), usb_2 (HS only; the
+# --- onboard AIC8800D80 WiFi/BT module hangs off USB) ---
+CONFIG_USB=y
+CONFIG_USB_XHCI_HCD=y
+CONFIG_USB_DWC3=y
+CONFIG_USB_DWC3_QCOM=y
+CONFIG_PHY_QCOM_USB_SNPS_FEMTO_V2=y
+CONFIG_PHY_QCOM_QMP_COMBO=y
+CONFIG_USB_STORAGE=y
+CONFIG_USB_UAS=y
+CONFIG_USB_HID=y
+# USB network adapters (bench convenience)
+CONFIG_USB_USBNET=m
+CONFIG_USB_NET_CDCETHER=m
+CONFIG_USB_NET_CDC_NCM=m
+CONFIG_USB_RTL8152=m
+CONFIG_USB_NET_AX88179_178A=m
+
+# --- WiFi/BT: Aicsemi AIC8800D80 (USB). The DTS deletes the WCN6750
+# --- wifi/wpss nodes; the vendor driver comes from package/aic8800
+# --- (aic_load_fw + aic8800_fdrv + aic_btusb, fullmac cfg80211).
+# --- Do NOT enable BT_HCIBTUSB: stock btusb would grab the AIC BT
+# --- interface before aic_btusb.
+CONFIG_CFG80211=m
+CONFIG_RFKILL=y
+CONFIG_BT=m
+CONFIG_BT_RFCOMM=m
+
+# --- GENI I2C/SPI/QSPI + GPI (GSI) DMA the board buses request ---
+CONFIG_I2C_QCOM_GENI=y
+CONFIG_SPI_QCOM_GENI=y
+CONFIG_SPI_QCOM_QSPI=y
+CONFIG_QCOM_GPI_DMA=y
+# QSPI NOR flash (winbond w25q256jw)
+CONFIG_MTD=y
+CONFIG_MTD_SPI_NOR=y
+CONFIG_MTD_BLOCK=y
+
+# --- RTC (st,m41t11 @ i2c10), input, LEDs ---
+CONFIG_RTC_DRV_M41T80=y
+CONFIG_INPUT_PM8941_PWRKEY=y
+CONFIG_KEYBOARD_GPIO=y
+CONFIG_LEDS_GPIO=y
+CONFIG_LEDS_TRIGGER_HEARTBEAT=y
+
+# --- cpufreq / thermal / PMIC ADC (board thermal zones) ---
+CONFIG_ARM_QCOM_CPUFREQ_HW=y
+CONFIG_QCOM_LMH=y
+CONFIG_QCOM_SPMI_ADC5=y
+CONFIG_QCOM_SPMI_ADC_TM5=y
+CONFIG_QCOM_SPMI_TEMP_ALARM=y
+
+# --- QRTR: pin =y explicitly. QCOM_PD_MAPPER/QCOM_QMI_HELPERS (above,
+# --- =y) depend on it; without this olddefconfig silently demotes the
+# --- whole CDSP bring-up chain to =m.
+CONFIG_QRTR=y
+CONFIG_QRTR_SMD=y
+
+# --- GPU / display (Adreno 643 + DP -> RA620 HDMI bridge), video,
+# --- audio (AudioReach + WCD9380 codec). Modules: not boot-critical,
+# --- probed via udev coldplug. Firmware from qcom-dsp-firmware.
+CONFIG_DRM_MSM=m
+CONFIG_DRM_SIMPLE_BRIDGE=m
+CONFIG_DRM_DISPLAY_CONNECTOR=m
+CONFIG_SC_DISPCC_7280=m
+CONFIG_SC_GPUCC_7280=m
+CONFIG_SC_LPASS_CORECC_7280=m
+CONFIG_VIDEO_QCOM_VENUS=m
+CONFIG_QCOM_APR=m
+CONFIG_SOUNDWIRE=m
+CONFIG_SOUNDWIRE_QCOM=m
+CONFIG_SND_SOC_QCOM=m
+CONFIG_SND_SOC_SC8280XP=m
+CONFIG_SND_SOC_LPASS_RX_MACRO=m
+CONFIG_SND_SOC_LPASS_TX_MACRO=m
+CONFIG_SND_SOC_LPASS_VA_MACRO=m
+CONFIG_SND_SOC_WCD938X=m
+CONFIG_SND_SOC_WCD938X_SDW=m
+CONFIG_PINCTRL_SC7280_LPASS_LPI=m
+CONFIG_SND_USB_AUDIO=m

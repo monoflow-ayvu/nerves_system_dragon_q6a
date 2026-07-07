@@ -33,10 +33,12 @@ is recovered via **EDL**, not reflashing SD.
 - **Observed UEFI version string** (`QC_IMAGE_VERSION_STRING=BOOT...KODIAK...`
   from the boot log): __________ → record in `GOAL.md`.
 
-## 2. Phase-0 NPU harvest (the one missing blob)
+## 2. Phase-0 NPU sanity check (blobs already vendored)
 
-On a stock RadxaOS boot, get `fastrpc_test -a v68` passing, then archive the
-known-good tuple. The critical file for this repo is `cdsp.mbn`:
+The DSP firmware is now vendored in `blobs/qcom-dsp-firmware/` from upstream
+linux-firmware (board `cdsp.mbn` = `CDSP.HT.2.5.c4-00004-KODIAK-1`, matching
+the pinned shell) - no harvest is required. A stock RadxaOS boot is still
+the fastest way to cross-check the known-good tuple if anything misbehaves:
 
 ```sh
 apt install fastrpc libcdsprpc1 fastrpc-test
@@ -55,8 +57,8 @@ cp /sys/firmware/fdt ~/harvest/stock.dtb                       # DTB in use
   `package/qcom-dsp-shell/qcom-dsp-shell.mk` to the matching version, or use
   Olof's validated combo (generic upstream `qcm6490/cdsp.mbn` + matching
   RB3gen2 shell at the same string).
-- Drop `cdsp.mbn` (and `adsp.mbn`) into `blobs/qcom-dsp-firmware/lib/firmware/...`
-  per that dir's README, add sha256sums, rebuild.
+- The vendored blobs already carry the matching version; only revisit
+  `blobs/qcom-dsp-firmware/` if the observed stock version differs.
 
 Also confirm which device nodes exist and which domain the test uses:
 ```sh

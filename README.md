@@ -10,14 +10,19 @@ present and version-matched at first boot.
 | --- | --- |
 | CPU | Qualcomm QCS6490 (QCM6490 family; sc7280 mainline lineage) |
 | Linux kernel | 6.18.0 (Deka `linux-dragon-q6a`, mainline + minimal board patches) |
-| Boot | on-board Qualcomm UEFI → GRUB (arm64-efi) on ESP → A/B squashfs slots |
+| Boot | on-board Qualcomm UEFI → GRUB (arm64-efi) on ESP → A/B squashfs slots with auto-rollback |
 | Console | debug UART `ttyMSM0`, 115200 8N1 |
 | NPU | Hexagon CDSP via FastRPC/remoteproc/GLINK; DSP firmware + shell + libs pre-installed |
-| Storage | microSD / UFS / eMMC (same image; A/B + app data partition) |
+| Storage | microSD / UFS / eMMC (same image; A/B + app data partition); NVMe on M.2 |
+| Ethernet | GbE (Realtek RTL8111 on PCIe, `r8169` built in) |
+| WiFi/BT | WiFi 6 + BT 5.4 (Aicsemi AIC8800D80 on USB, vendor driver `package/aic8800`) + `wpa_supplicant` for `vintage_net_wifi` |
+| USB | dual XHCI hosts (dwc3), USB storage/HID, common USB-NIC drivers |
+| Extras | GPU/display (drm/msm + DP→HDMI bridge), Venus video, AudioReach audio - all as modules; RTC, thermal zones, cpufreq |
 
-> Status: boot chain is QEMU-validated. On-board NPU validation
-> (`fastrpc_test -a v68`) is pending bench time and one blob harvest - see
-> **NPU stack** and `BRINGUP.md`.
+> Status: boot chain + A/B rollback are QEMU-validated. On-board
+> validation (NPU `fastrpc_test -a v68`, Ethernet/WiFi/USB) is pending
+> bench time - see `BRINGUP.md`. All firmware blobs are vendored; no
+> manual harvest step remains.
 
 ## Boot architecture
 
@@ -53,13 +58,29 @@ a provisioning data store - no U-Boot involved).
 **Secure Boot must be off** in the UEFI setup menu: GRUB disables its
 `devicetree` command under Secure Boot.
 
-### A/B failback
+### A/B updates with automatic rollback
 
-GRUB-side, identical to `nerves_system_x86_64`: `grubenv` carries
-`boot`/`validated`/`booted_once`. `fwup` writes the new slot's rootfs first
-and flips the active `grubenv` last, so an interrupted update never points
-GRUB at a half-written slot. On-device revert/validate/factory-reset live
-in `/usr/share/fwup/ops.fw` (`fwup-ops.conf`).
+`grubenv` on the ESP carries `boot`/`validated`/`booted_once`, and
+`grub.cfg` implements real **boot-once** semantics (which upstream
+`nerves_system_x86_64` scaffolds but never wired up):
+
+1. `fwup` upgrade writes the new slot's rootfs first and flips `grubenv`
+   last (`validated=0 booted_once=0`), so an interrupted update never
+   points GRUB at a half-written slot.
+2. On the next boot GRUB marks `booted_once=1` (`save_env`) and gives the
+   new slot exactly one try.
+3. If that boot never validates, the *following* boot falls back to the
+   previous slot and re-marks it valid. `qcom-coldplug.sh` then runs
+   `fwup -t reconcile` to sync `nerves_fw_active` with the slot that
+   actually booted.
+4. Validation: with `nerves_fw_autovalidate=1` (the shipped default) the
+   new slot validates itself at boot via `fwup -t autovalidate` once it
+   reaches erlinit's pre-run hook. Set it to `0` (e.g. NervesHub) to
+   require an explicit `Nerves.Runtime.validate_firmware/0` instead.
+
+On-device revert/validate/factory-reset live in `/usr/share/fwup/ops.fw`
+(`fwup-ops.conf`); `revert` writes the target slot's *pre-validated*
+grubenv since a previously-run slot is known good.
 
 ## NPU stack (Hexagon CDSP)
 
@@ -70,8 +91,8 @@ requires:
 | --- | --- | --- |
 | `qcom-fastrpc` | `libcdsprpc`/`libadsprpc`, `cdsprpcd`, `fastrpc_test` | qualcomm/fastrpc (autotools, from source) |
 | `qcom-dsp-shell` | `fastrpc_shell_unsigned_3` + skels → `/usr/lib/dsp` | linux-msm/hexagon-dsp-binaries (`qcs6490/radxa/dragon-q6a`) |
-| `qcom-dsp-firmware` | `cdsp.mbn` / `adsp.mbn` → `/lib/firmware/qcom/...` | **Phase-0 harvest** (see below) |
-| `qairt-runtime` | QNN/HTP libs (optional, off by default) | Qualcomm QAIRT SDK (local drop-in) |
+| `qcom-dsp-firmware` | `cdsp.mbn`/`adsp.mbn`, GPU zap/SQE/GMU, Venus, QUP fw → `/lib/firmware/qcom/...` | upstream linux-firmware (redistributable; vendored in `blobs/`) |
+| `qairt-runtime` | QNN/HTP libs (enabled in `nerves_defconfig`) | Qualcomm QAIRT SDK (local drop-in) |
 
 Runtime plumbing (no systemd on Nerves - `rootfs_overlay/`):
 `qcom-coldplug.sh` (erlinit `--pre-run-exec`) starts udev, `chmod 0666`s
@@ -79,18 +100,36 @@ Runtime plumbing (no systemd on Nerves - `rootfs_overlay/`):
 launches `cdsprpcd`. `DSP_LIBRARY_PATH`/`ADSP_LIBRARY_PATH=/usr/lib/dsp` are
 baked into `/etc/erlinit.config`.
 
-### The one manual step: `cdsp.mbn`
+### DSP firmware provenance
 
-`hexagon-dsp-binaries` ships the DSP **shell** and skels but **not** the
-signed `cdsp.mbn` firmware image. That must be harvested once from a stock
-RadxaOS boot and dropped into `blobs/qcom-dsp-firmware/` (see that dir's
-`README.md`). Until then the build still succeeds (fine for QEMU) but the
-CDSP will not come up on hardware. **Version rule:** the harvested
-`cdsp.mbn` and the shipped `fastrpc_shell_unsigned_3` must carry the same
-build version string, or `FASTRPC_IOCTL_INIT_CREATE` fails with
-`0x80000600`.
+The signed `cdsp.mbn`/`adsp.mbn` are vendored in `blobs/qcom-dsp-firmware/`
+from **upstream linux-firmware** (Radxa contributed the board-specific set;
+marked Redistributable, see `LICENSE.qcom`/`NOTICE.qcom` there). No manual
+harvest is needed. **Version rule:** `cdsp.mbn` and the shipped
+`fastrpc_shell_unsigned_3` must carry the same build version string
+(currently `CDSP.HT.2.5.c4-00004-KODIAK-1` on both), or
+`FASTRPC_IOCTL_INIT_CREATE` fails with `0x80000600`.
 
 The full frozen version tuple is in `GOAL.md`.
+
+## Connectivity (Ethernet / WiFi / Bluetooth / USB)
+
+- **Ethernet**: Realtek RTL8111 on `pcie0`; `r8169` + the QMP PCIe PHY are
+  built into the kernel, so `eth0` is available at boot for
+  `vintage_net_ethernet`.
+- **WiFi 6 + BT 5.4**: onboard Aicsemi AIC8800D80 (Quectel FCU760K) on
+  USB. `package/aic8800` builds Radxa's vendor driver (pinned commit,
+  their debian patch series applied - it carries the ≥6.x kernel compat
+  fixes) into `aic_load_fw`/`aic8800_fdrv`/`aic_btusb` modules, loaded by
+  udev on enumeration, plus firmware in `/lib/firmware/aic8800_fw/USB/`.
+  `wpa_supplicant` (nl80211, AP, WPA3, EAP), `wireless-regdb` and `iw` are
+  in the image for `vintage_net_wifi`. The BT interface registers a BlueZ
+  HCI (usable from Elixir with BlueHeron); stock `btusb` is deliberately
+  **not** built so it can't grab the interface first.
+- **USB**: both dwc3 controllers in host mode (XHCI), USB storage/UAS/HID
+  built in, common USB NICs (CDC-ECM/NCM, RTL8152, AX88179) as modules.
+- **Not in the DTS** (so not supported): WCN6750/ath11k - the board's WiFi
+  really is the USB module.
 
 ## Building
 

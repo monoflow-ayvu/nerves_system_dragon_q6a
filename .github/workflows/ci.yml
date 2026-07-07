@@ -116,6 +116,14 @@ jobs:
         # + IEx. Emulated boot on a TCG runner is several times slower than on
         # hardware (guest timekeeping is heavily distorted), so give it room.
         run: BOOT_TIMEOUT=1200 EDK2_CODE=/usr/share/AAVMF/AAVMF_CODE.fd ./test/qemu-smoke.sh
+      - name: QEMU A/B rollback test
+        # Reuses the example.fw the smoke test just built. Proves: upgrade ->
+        # GRUB boots slot B once -> on-target autovalidate rewrites grubenv;
+        # then a simulated failed first boot -> GRUB falls back to slot A and
+        # the on-target reconcile task syncs nerves_fw_active.
+        run: |
+          BOOT_TIMEOUT=1200 EDK2_CODE=/usr/share/AAVMF/AAVMF_CODE.fd \
+            ./test/qemu-rollback.sh example/_build/dragon_q6a_dev/nerves/images/example.fw
 
   deploy-system:
     # Gate the release on a green build AND a successful QEMU boot.

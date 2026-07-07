@@ -1,0 +1,12 @@
+d222f3fe290ef0516ee0ec43082596bad2df0fcbc2e0bbb26987623cef90cf76  ./qcom/a660_sqe.fw
+8acab7b417d9ebde89a1de9ae1e2c261d352fcab122e31ecd580cec9fe2ae5e7  ./qcom/a660_gmu.bin
+43e9c89e15ee82daf83214cae34006a8515fddf9db7f645f5eff4b8e3c4ebb64  ./qcom/qcm6490/cdsp.mbn
+8a98579962d3a62c3490b134f82952dfb6646f9d33a1416dc68842293dfc5c94  ./qcom/qcm6490/adsp.mbn
+5dbe91cb3fc9655ea2f2a9e1e169a0e30877bec84215899136a519444ca62a3d  ./qcom/qcm6490/a660_zap.mbn
+9fc1f136858ee878c38b05aff63621b6bf5fbb5dd91a9ab98bbf46057a9c963d  ./qcom/qcm6490/qupv3fw.elf
+a66e86e34dc69a870fe631c73ed4a93d9fcfea6f3f2a4ac02cb118cb505bbbb2  ./qcom/vpu/vpu20_p4.mbn
+01fea79407e512a644fa33a7882af9958b043cfe5389aba81ca91fb74267a5f3  ./qcom/qcs6490/radxa/dragon-q6a/adsp.mbn
+66ce8531efb7979d234e0f0eabbe18d038ac97da771a8a194f613df8f0724e81  ./qcom/qcs6490/radxa/dragon-q6a/adspr.jsn
+982a99853495e34726b8e44697fdfad303334de0a67cbf6cde306c8f1731000b  ./qcom/qcs6490/radxa/dragon-q6a/adspua.jsn
+a9645c9418bc8a456fab8e379c9e30b1c6135a32fc2b91e99e77cbded93a1d56  ./qcom/qcs6490/radxa/dragon-q6a/cdsp.mbn
+6d01cd7dce745204d5de20efe57e2511149ca2a5b48ee562fbedefda573ca465  ./qcom/qcs6490/radxa/dragon-q6a/cdspr.jsn

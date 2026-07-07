@@ -2,9 +2,11 @@
 #
 # qcom-dsp-firmware
 #
-# Kernel-loaded Hexagon DSP firmware (cdsp.mbn / adsp.mbn) for the Dragon
-# Q6A. Vendored from a Phase-0 harvest of stock RadxaOS (local use only);
-# see blobs/qcom-dsp-firmware/README.md for the harvest procedure.
+# Kernel-loaded Hexagon DSP firmware (cdsp.mbn / adsp.mbn), Adreno GPU
+# firmware (zap/SQE/GMU), Venus video firmware and GENI SE firmware for
+# the Dragon Q6A. Vendored from upstream linux-firmware, where they are
+# marked "Licence: Redistributable" (see LICENSE.qcom / NOTICE.qcom in the
+# blobs dir and blobs/qcom-dsp-firmware/README.md for provenance).
 #
 # The package tolerates an empty blobs tree so the build stays green for
 # the QEMU smoke test (which has no real DSP). On real hardware the .mbn
@@ -15,8 +17,8 @@
 QCOM_DSP_FIRMWARE_VERSION = 1.0.0
 QCOM_DSP_FIRMWARE_SITE = $(NERVES_DEFCONFIG_DIR)/blobs/qcom-dsp-firmware
 QCOM_DSP_FIRMWARE_SITE_METHOD = local
-QCOM_DSP_FIRMWARE_LICENSE = PROPRIETARY
-QCOM_DSP_FIRMWARE_REDISTRIBUTE = NO
+QCOM_DSP_FIRMWARE_LICENSE = Redistributable, no modification (Qualcomm firmware)
+QCOM_DSP_FIRMWARE_LICENSE_FILES = LICENSE.qcom NOTICE.qcom
 QCOM_DSP_FIRMWARE_INSTALL_STAGING = NO
 
 # cdsp.mbn/adsp.mbn are Hexagon firmware images; keep them out of the

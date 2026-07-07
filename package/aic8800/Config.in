@@ -1,0 +1,24 @@
+config BR2_PACKAGE_AIC8800
+	bool "aic8800 (USB WiFi 6 + BT driver and firmware)"
+	depends on BR2_LINUX_KERNEL
+	help
+	  Vendor driver + firmware for the Aicsemi AIC8800D80 USB WiFi/BT
+	  module (Quectel FCU760K) on the Radxa Dragon Q6A, from Radxa's
+	  DKMS packaging (github.com/radxa-pkg/aic8800, pinned commit).
+
+	  Builds three out-of-tree kernel modules:
+	    aic_load_fw    - USB probe + firmware download (re-enumerates)
+	    aic8800_fdrv   - fullmac cfg80211 WiFi driver
+	    aic_btusb      - BlueZ HCI driver for the BT interface
+
+	  Kernel requirements (set in linux-dragon-q6a.fragment):
+	  CONFIG_CFG80211, CONFIG_BT, USB host. CONFIG_BT_HCIBTUSB must
+	  stay OFF or stock btusb grabs the BT interface first.
+
+	  Firmware installs to /lib/firmware/aic8800_fw/USB/ (the path the
+	  Radxa patch series bakes into the driver).
+
+	  https://github.com/radxa-pkg/aic8800
+
+comment "aic8800 needs a Linux kernel to be built"
+	depends on !BR2_LINUX_KERNEL

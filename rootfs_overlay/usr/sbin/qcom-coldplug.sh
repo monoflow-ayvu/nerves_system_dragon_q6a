@@ -9,6 +9,18 @@
 
 set -e
 
+# 0. A/B slot bookkeeping (see grub.cfg + fwup-ops.conf):
+#    - reconcile: if GRUB auto-fell-back to the other slot, sync
+#      nerves_fw_active with the slot that actually mounted /.
+#    - autovalidate: when nerves_fw_autovalidate=1, a freshly upgraded slot
+#      that boots this far validates itself so GRUB keeps booting it.
+#    Never let bookkeeping failures block the app from starting.
+OPS_FW=/usr/share/fwup/ops.fw
+if [ -e "$OPS_FW" ] && [ -e /dev/rootdisk0 ] && command -v fwup >/dev/null 2>&1; then
+    fwup -q -t reconcile -d /dev/rootdisk0 "$OPS_FW" || true
+    fwup -q -t autovalidate -d /dev/rootdisk0 "$OPS_FW" || true
+fi
+
 # 1. Dynamic device management (eudev). Start the daemon and coldplug.
 if [ -x /sbin/udevd ] || [ -x /usr/sbin/udevd ]; then
     mkdir -p /run/udev

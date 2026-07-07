@@ -11,6 +11,25 @@
 
 load_env
 
+# A/B auto-rollback, same logic as the real grub.cfg (see there for the
+# full explanation). Exercised under QEMU too so the smoke test covers
+# load_env/save_env on the ESP.
+if [ "$validated" != "1" ]; then
+    if [ "$booted_once" = "1" ]; then
+        if [ "$boot" = "1" ]; then
+            set boot=0
+        else
+            set boot=1
+        fi
+        set validated=1
+        save_env boot validated booted_once
+        echo "Slot was not validated after its first boot - falling back!"
+    else
+        set booted_once=1
+        save_env booted_once
+    fi
+fi
+
 regexp --set=nerves_disk '^\(?([^,]+)' "$root"
 if [ -z "$nerves_disk" ]; then
     set nerves_disk=hd0

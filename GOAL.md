@@ -98,7 +98,7 @@ be validated *without* the board must be validated here first.
 | Kernel | Deka `linux-dragon-q6a` branch `dragon-q6a-v6.18` @ `e05c4faeded00da418899bd7fb03be473ca18981` (mainline 6.18.0 + Dragon Q6A patches) |
 | DTB | `qcom/qcs6490-radxa-dragon-q6a` (in-tree; includes mainline `sc7280.dtsi`, carries CDSP/ADSP remoteproc + `qcom,fastrpc` glink nodes) |
 | DSP shell | linux-msm/hexagon-dsp-binaries @ `2ba83638…` → `qcs6490/radxa/dragon-q6a/CDSP.HT.2.5.c4-00004-KODIAK-1` (CDSP) + `ADSP.HT.5.5.c9-00028-KODIAK-2` (ADSP) |
-| cdsp.mbn / adsp.mbn | **Phase-0 harvest only** (NOT in hexagon-dsp-binaries - repo has no .mbn). Must match the CDSP shell version string above. |
+| cdsp.mbn / adsp.mbn | Vendored in `blobs/qcom-dsp-firmware/` from upstream linux-firmware (`qcom/qcs6490/radxa/dragon-q6a/`, Redistributable). CDSP version matches the shell string above. |
 | fastrpc userspace | qualcomm/fastrpc branch `development` @ `706071caca54b9a56d78793c30d04351de5fbd96` (autotools; deps libyaml, libbsd) |
 | UEFI firmware (board-side, QSPI NOR) | record from bench boot log (Phase 0) |
 

@@ -1,36 +1,54 @@
-# qcom-dsp-firmware blobs (Phase-0 harvest)
+# qcom-dsp-firmware blobs (vendored from upstream linux-firmware)
 
-The kernel's remoteproc loads these signed Hexagon DSP images by the
-`firmware-name` paths in `qcs6490-radxa-dragon-q6a.dts`. They are **not**
-redistributable in any public package, so they must be harvested from a
-stock RadxaOS install running on the actual board.
+Signed Qualcomm firmware for the Radxa Dragon Q6A, vendored from
+**upstream linux-firmware** (`main`, July 2026 — Radxa contributed the
+board-specific DSP set upstream). All files are marked
+*"Licence: Redistributable"* in linux-firmware's WHENCE; see
+`LICENSE.qcom` and `NOTICE.qcom` here.
 
-## Required paths (drop the files here, keeping this layout)
+The kernel loads these by the `firmware-name` paths in
+`qcs6490-radxa-dragon-q6a.dts` (or the driver's built-in path for
+GPU/Venus).
+
+## Layout (mirrors upstream linux-firmware, symlinks included)
 
 ```
-blobs/qcom-dsp-firmware/lib/firmware/qcom/qcs6490/cdsp.mbn
-blobs/qcom-dsp-firmware/lib/firmware/qcom/qcs6490/radxa/dragon-q6a/adsp.mbn
+lib/firmware/qcom/qcs6490/radxa/dragon-q6a/cdsp.mbn    CDSP.HT.2.5.c4-00004-KODIAK-1 (remoteproc_cdsp)
+lib/firmware/qcom/qcs6490/radxa/dragon-q6a/cdspr.jsn
+lib/firmware/qcom/qcs6490/radxa/dragon-q6a/adsp.mbn    ADSP.HT.5.5.c9-00028-KODIAK-2 (remoteproc_adsp)
+lib/firmware/qcom/qcs6490/radxa/dragon-q6a/adspr.jsn
+lib/firmware/qcom/qcs6490/radxa/dragon-q6a/adspua.jsn
+lib/firmware/qcom/qcm6490/{cdsp,adsp}.mbn              generic Kodiak fallbacks
+lib/firmware/qcom/qcs6490/{cdsp,adsp}.mbn              -> ../qcm6490/* (upstream symlinks)
+lib/firmware/qcom/qcm6490/a660_zap.mbn                 Adreno 643 zap shader
+lib/firmware/qcom/qcs6490/a660_zap.mbn                 -> ../qcm6490/a660_zap.mbn (DTS zap path)
+lib/firmware/qcom/a660_sqe.fw, a660_gmu.bin            Adreno 643 SQE/GMU (drm/msm)
+lib/firmware/qcom/vpu/vpu20_p4.mbn                     Venus video firmware
+lib/firmware/qcom/vpu-2.0/venus.mbn                    -> ../vpu/vpu20_p4.mbn (sc7280 venus path)
+lib/firmware/qcom/qcm6490/qupv3fw.elf                  GENI SE (QUP) firmware
 ```
 
-(`cdsp.mbn` is the one the acceptance test needs; `adsp.mbn` is for audio
-DSP later.)
+## Version matching (frozen tuple, see GOAL.md)
 
-## Harvest procedure (on a stock RadxaOS boot, Phase 0)
+The board `cdsp.mbn` is **CDSP.HT.2.5.c4-00004-KODIAK-1**, which matches
+the `fastrpc_shell_unsigned_3` pinned in
+`package/qcom-dsp-shell/qcom-dsp-shell.mk`. Verify after any refresh:
 
-1. `apt install fastrpc libcdsprpc1 fastrpc-test` and confirm
-   `fastrpc_test -a v68` passes.
-2. Copy the firmware the running kernel actually loaded:
-   ```sh
-   cp -a /lib/firmware/qcom/qcs6490/cdsp.mbn .
-   cp -a /lib/firmware/qcom/qcs6490/radxa/dragon-q6a/adsp.mbn .
-   ```
-   (Check `dmesg | grep -i cdsp` for the exact path if it differs.)
-3. Record the version string (`strings cdsp.mbn | grep -i KODIAK`) and make
-   sure it matches the `fastrpc_shell_unsigned_3` shipped by
-   `qcom-dsp-shell` (CDSP.HT.2.5.c4-00004-KODIAK-1). If they differ, either
-   re-pin the shell in `package/qcom-dsp-shell/qcom-dsp-shell.mk` to match
-   this cdsp.mbn, or use the matching pair from Olof's validated combo.
-4. Drop the files into the paths above and add sha256sums to `SHA256SUMS`.
+```sh
+strings lib/firmware/qcom/qcs6490/radxa/dragon-q6a/cdsp.mbn | grep KODIAK
+```
 
-Until then the build installs no firmware (fine for QEMU; the CDSP will not
-come up on hardware).
+If the versions diverge, FASTRPC_IOCTL_INIT_CREATE fails with 0x80000600 —
+re-pin `qcom-dsp-shell` to the matching directory.
+
+## Refreshing
+
+```sh
+BASE=https://gitlab.com/kernel-firmware/linux-firmware/-/raw/main
+curl -fLO $BASE/qcom/qcs6490/radxa/dragon-q6a/cdsp.mbn   # etc.
+(cd lib/firmware && find . -type f -exec sha256sum {} \;) > SHA256SUMS
+```
+
+Verify with `(cd lib/firmware && sha256sum -c SHA256SUMS)` from this dir's
+parent of `lib/firmware` (paths in SHA256SUMS are relative to
+`lib/firmware`).

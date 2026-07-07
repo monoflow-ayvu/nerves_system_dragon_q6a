@@ -13,3 +13,10 @@ comment "QAIRT / QNN runtime (proprietary SDK blobs, local dir)"
 source "$NERVES_DEFCONFIG_DIR/package/qairt-runtime/Config.in"
 
 endmenu
+
+menu "Dragon Q6A connectivity"
+
+comment "AIC8800D80 USB WiFi 6 / Bluetooth (vendor driver + firmware)"
+source "$NERVES_DEFCONFIG_DIR/package/aic8800/Config.in"
+
+endmenu
