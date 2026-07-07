@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.1
+
+Same content as v0.5.0, whose release run died packaging the hex
+tarball (`mix hex.build` 16 MiB cap vs 47 MB of vendored blobs — first
+tag since the blobs landed). CI now skips hex validation
+(`hex-validate: false`); this system ships via GitHub Releases only.
+The v0.5.0 tag produced no release and can be deleted.
+
 ## v0.5.0
 
 Multimedia userspace (kernel + firmware side shipped in v0.4.0, which

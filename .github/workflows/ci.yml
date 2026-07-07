@@ -29,6 +29,10 @@ jobs:
           elixir-version: ${{ env.ELIXIR_VERSION }}
           nerves-bootstrap-version: ${{ env.NERVES_BOOTSTRAP_VERSION }}
           push-to-download-site: false
+          # mix hex.build chokes on the 47 MB vendored blobs/ (16 MiB hex
+          # cap). This system ships via GitHub Releases, not hex.pm, so the
+          # hex-package validation is moot.
+          hex-validate: false
 
   build-system:
     needs: [get-br-dependencies]
