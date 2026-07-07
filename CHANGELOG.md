@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.5.3
+
+- **Fix A/B bookkeeping never running on-target** (caught by the first
+  real run of `test/qemu-rollback.sh` — v0.4.0 was never pushed, so CI
+  had never executed it): the nerves-common busybox has no `command`
+  builtin (`ASH_CMDCMD` off), so `command -v fwup` in
+  `qcom-coldplug.sh` failed and silently skipped the
+  reconcile/autovalidate fwup calls every boot. GRUB fallback worked,
+  but `nerves_fw_active`/`nerves_fw_validated` never re-synced. Now the
+  script probes `[ -x /usr/bin/fwup ]` and calls fwup by absolute path;
+  `busybox.fragment` also enables `CONFIG_ASH_CMDCMD`. Full rollback
+  test passes locally (11/11).
+- **CI: qemu-smoke on ubuntu-24.04** (QEMU 8.2). QEMU 6.2's distorted
+  TCG clock stalled the app-partition format and made the app-banner
+  check non-fatal.
+
 ## v0.5.2
 
 The build-system action has its own `mix hex.build` validation step —

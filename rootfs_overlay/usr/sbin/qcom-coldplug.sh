@@ -15,10 +15,13 @@ set -e
 #    - autovalidate: when nerves_fw_autovalidate=1, a freshly upgraded slot
 #      that boots this far validates itself so GRUB keeps booting it.
 #    Never let bookkeeping failures block the app from starting.
+#    NOTE: probe fwup by absolute path. The nerves-common busybox has no
+#    `command` builtin (ASH_CMDCMD off), so `command -v fwup` here fails
+#    and silently skips the whole block (bug found via QEMU rollback test).
 OPS_FW=/usr/share/fwup/ops.fw
-if [ -e "$OPS_FW" ] && [ -e /dev/rootdisk0 ] && command -v fwup >/dev/null 2>&1; then
-    fwup -q -t reconcile -d /dev/rootdisk0 "$OPS_FW" || true
-    fwup -q -t autovalidate -d /dev/rootdisk0 "$OPS_FW" || true
+if [ -e "$OPS_FW" ] && [ -e /dev/rootdisk0 ] && [ -x /usr/bin/fwup ]; then
+    /usr/bin/fwup -q -t reconcile -d /dev/rootdisk0 "$OPS_FW" || true
+    /usr/bin/fwup -q -t autovalidate -d /dev/rootdisk0 "$OPS_FW" || true
 fi
 
 # 1. Dynamic device management (eudev). Start the daemon and coldplug.

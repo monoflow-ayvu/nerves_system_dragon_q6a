@@ -3,5 +3,8 @@
 # helpers (read-only rootfs makes reinstalling tools painful — bake them in).
 CONFIG_CHMOD=y
 CONFIG_PIDOF=y
+# POSIX `command` builtin for ash — nerves-common disables it, which made
+# `command -v` probes in boot scripts fail silently.
+CONFIG_ASH_CMDCMD=y
 CONFIG_LSOF=y
 CONFIG_TIME=y
