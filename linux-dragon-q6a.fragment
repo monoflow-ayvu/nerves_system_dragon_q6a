@@ -235,3 +235,10 @@ CONFIG_SND_SOC_WCD938X=m
 CONFIG_SND_SOC_WCD938X_SDW=m
 CONFIG_PINCTRL_SC7280_LPASS_LPI=m
 CONFIG_SND_USB_AUDIO=m
+
+# --- USB webcams (UVC). Pinned explicitly rather than trusting the
+# --- arch defconfig; videobuf2/media-controller deps come along.
+CONFIG_MEDIA_SUPPORT=m
+CONFIG_MEDIA_USB_SUPPORT=y
+CONFIG_MEDIA_CAMERA_SUPPORT=y
+CONFIG_USB_VIDEO_CLASS=m

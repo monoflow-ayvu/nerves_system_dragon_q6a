@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.5.0
+
+Multimedia userspace (kernel + firmware side shipped in v0.4.0, which
+was never tagged — its changes ship with this release too):
+
+- **GPU**: Mesa freedreno (Adreno 643) with EGL/GLES2/GBM for KMS
+  fullscreen rendering; `kmscube` + libdrm `modetest` for bring-up.
+- **Audio**: alsa-lib + alsa-utils (aplay/amixer/alsactl/alsaucm/
+  speaker-test). No UCM profiles for the WCD938x yet — mixer routing
+  needs manual setup.
+- **Video**: GStreamer (base/good/bad + libav) with `v4l2*` elements
+  for Venus HW decode/encode and `kmssink` zero-copy display, plus
+  the `ffmpeg` CLI (GPL, all codecs, `*_v4l2m2m` HW codecs) and
+  `v4l2-ctl`. gst-gl intentionally skipped (needs X11/Wayland).
+- **Webcams**: UVC pinned in the kernel fragment (`USB_VIDEO_CLASS=m`
+  + media USB/camera support) instead of trusting the arch defconfig;
+  gst `jpegdec` added for MJPEG capture (USB mics already covered by
+  `SND_USB_AUDIO=m`).
+
 ## v0.4.0
 
 Full hardware enablement + real A/B rollback:
