@@ -60,6 +60,8 @@ jobs:
           otp-version: ${{ env.OTP_VERSION }}
           elixir-version: ${{ env.ELIXIR_VERSION }}
           nerves-bootstrap-version: ${{ env.NERVES_BOOTSTRAP_VERSION }}
+          # Same 16 MiB hex cap vs 47 MB blobs/ as in get-br-dependencies.
+          hex-validate: false
 
   qemu-smoke:
     needs: [build-system]

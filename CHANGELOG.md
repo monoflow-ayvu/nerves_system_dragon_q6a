@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.2
+
+The build-system action has its own `mix hex.build` validation step —
+same 16 MiB cap as v0.5.1 fixed in get-br-dependencies. Both now run
+with `hex-validate: false`. v0.5.1's tag produced no release and can
+be deleted.
+
 ## v0.5.1
 
 Same content as v0.5.0, whose release run died packaging the hex
