@@ -89,8 +89,69 @@ but if it recurs, the out-of-spec taint is the first thing to rule out.
    task #12 — the merged-`.config` grep, which is the only thing that catches the silent-`=m` trap.
    Phase 2 is where QEMU stops helping: B2 (display/GPU) and B6 (measured boot) both need the board.
 
+## Phase 2 (in progress)
+
+Committed Phase 1 as `2497e2e` on branch **`phase1-yocto-parity`** (was on `main`; fast-forward
+`main` onto it when ready).
+
+| # | Change | State |
+|---|---|---|
+| 9 | **B2** display/GPU builtin — replaced the `=m` block with `SC_GPUCC_7280`/`SC_DISPCC_7280`/`DRM`/`DRM_MSM`/`DRM_MSM_DP`/simpledrm/`SYSFB_SIMPLEFB` all `=y` | code done, awaiting task #12 gate |
+| 10 | **B4** `# CONFIG_BT_HCIBTUSB is not set` + `CONFIG_BT_LE=y` + new `rootfs_overlay/etc/modprobe.d/aic8800.conf` (`blacklist btusb`) | code done |
+| 11 | **M11** `CONFIG_QCOMTEE=y` (base defconfig already has `TEE=y`+`OPTEE=y`; QCS6490 runs QTEE so no `tee0` without this) | code done |
+| 23 | fwup floor: `Dockerfile` `FWUP_VERSION` 1.13.1→**1.16.0**, `fwup.conf` `require-fwup-version` 1.12.0→**1.14.0**. Both release assets verified to exist (HTTP 200); host fwup 1.15.1 parses past the new floor | code done |
+| 8 | **B7** kernel tree switch — **q7 answered: take `radxa/kernel` clean, no DMA-buf patch** | BLOCKED until the running build finishes (`nerves_defconfig` is a `package_files()` input) |
+
+**q7 resolved (user, 2026-07-25):** drop the four Deka-only changes, including the doubled shared
+DMA-buf size. Accepted risk: dma-buf exhaustion under heavy GPU/NPU/camera buffer load, which QEMU
+cannot surface. If that ever appears, the fix is to reinstate it as a patch in `patches/`.
+Taking the tree wholesale also resolves the ICE caveat for free — Radxa's `qcom,ice` re-enable
+(`3d40d3a11`) and its HWKM-v1 driver support (`fc1bab211`) arrive together, which is what B7 warns
+against splitting.
+
+B7 edit, once the build is done (`nerves_defconfig:39`; tarball verified HTTP 200):
+```
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/radxa/kernel/archive/559f4f921a01e5358602153364c618fe2a3e431e.tar.gz"
+```
+Keep `BR2_LINUX_KERNEL_USE_ARCH_DEFAULT_CONFIG=y` — the two trees' `arch/arm64/configs/defconfig`
+are byte-identical per the plan (44334 bytes, md5 `58efbd609552b5518213f117160a7691`); **verify that
+before trusting it.** Then update the doc references B7 lists: `GOAL.md:31,98`, `README.md:12`,
+`BRINGUP.md:107`, `nerves_defconfig:34-38`.
+
+Deliberately doing two builds rather than one: the in-flight build gates B2/B4/M11 on the *current*
+Deka tree, so if a symbol turns out not to exist we learn that independently of the tree swap.
+
 ## Decisions and gotchas worth not re-deriving
 
+- **Changing `BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION` does NOT rebuild from the new tree.**
+  Buildroot keys off `build/linux-custom/.stamp_downloaded` + `.stamp_extracted`; if they exist it
+  never fetches the new tarball, silently rebuilds the OLD sources against the new fragment, and
+  then fails in `linux-legal-info` with
+  `cp: cannot stat '/nerves/dl/linux/<sha>.tar.gz': No such file or directory` — a *download* error
+  that is really a *stale-source* error. Tell-tale: `grep SUBLEVEL build/linux-custom/Makefile`
+  still reads the old tree's value, and the extract stamps are older than `.stamp_built`.
+  Fix (not a raw `rm -rf`, which the fable5 risk-guard blocks for container paths):
+  ```sh
+  docker run --rm -v <build-volume>:/nerves/project \
+    -v "$PWD/deps/nerves_system_br":/nerves/env/platform:ro \
+    -v "$PWD":/nerves/env/nerves_system_dragon_q6a:ro \
+    -w /nerves/project fermuch/nerves-dragon-q6a-builder:latest make linux-dirclean
+  ```
+  The build volume name is in `.nerves/artifacts/<system>-portable-<vsn>/.docker_id`.
+  `/nerves/env/platform` is `deps/nerves_system_br`. Costs a kernel rebuild only.
+- **`mix compile 2>&1 | tail -N` reports tail's exit code, not the build's.** A failed build looks
+  like `exit 0`. Always redirect to a file and check the build's own status.
+- **The task #12 gate found a symbol the plan missed: `CONFIG_TYPEC`.**
+  `drivers/phy/qualcomm/Kconfig:59-66` gates the combo PHY on **two** dependencies —
+  `depends on TYPEC || TYPEC=n` *and* `depends on DRM || DRM=n`. The plan only mentioned the DRM
+  one, so with `TYPEC=m` in the base defconfig `PHY_QCOM_QMP_COMBO` stayed `=m` even after
+  `DRM=y`, and dragged `DRM_AUX_BRIDGE` down with it. Adding `CONFIG_TYPEC=y` fixed both. This
+  matters for display: the combo PHY drives USB3 *and* DisplayPort, which is how HDMI reaches the
+  RA620 bridge.
+- **`DRM_AUX_BRIDGE` cannot be set from a fragment.** It is a hidden symbol (bare `tristate`, no
+  prompt, `drivers/gpu/drm/bridge/Kconfig:15-16`); it only follows its selector
+  (`select DRM_AUX_BRIDGE if DRM_BRIDGE` in `PHY_QCOM_QMP_COMBO`). Verify it in the merged
+  `.config`, never assert it in the fragment.
 - **`Logger` output never reaches the serial console — never gate a test on a `Logger` line.**
   Nerves routes Logger into an in-memory ring buffer (`config :logger, backends: [RingLogger]`,
   `example/config/target.exs:9`, `config.exs:10`); you read it with `RingLogger.next()` in IEx.

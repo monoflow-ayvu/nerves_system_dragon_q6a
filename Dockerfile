@@ -5,7 +5,12 @@ FROM ubuntu:22.04
 # (28.5.0.2), so the container uses OTP 28 as well.
 ARG OTP_VERSION=28.5.0.2
 ARG ELIXIR_VERSION=1.19.5
-ARG FWUP_VERSION=1.13.1
+# 1.14.0 is the floor: "U-Boot environment blocks can now be written to offsets
+# beyond 2 GB". Our env block is at LBA 64 so we do not hit that today, but the
+# app partition already starts at 4.25 GiB, so a future layout change easily
+# could. 1.16.0 matches the fwup that Buildroot builds for the target, which
+# keeps the host and on-target binaries from drifting.
+ARG FWUP_VERSION=1.16.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV USER=root

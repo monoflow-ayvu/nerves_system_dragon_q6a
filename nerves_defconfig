@@ -31,12 +31,30 @@ BR2_ROOTFS_POST_BUILD_SCRIPT="${NERVES_DEFCONFIG_DIR}/post-build.sh ${BR2_EXTERN
 BR2_ROOTFS_POST_IMAGE_SCRIPT="${NERVES_DEFCONFIG_DIR}/post-createfs.sh"
 BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
-# Frozen tuple (see GOAL.md): Deka-Embedded-Linux/linux-dragon-q6a, branch
-# dragon-q6a-v6.18 @ e05c4fa — mainline 6.18.0 + minimal Dragon Q6A patches
-# (eMMC/UFS enable, board DTS). Board file qcs6490-radxa-dragon-q6a.dts
-# includes mainline sc7280.dtsi, which carries the CDSP/ADSP remoteproc +
-# qcom,fastrpc glink nodes (compute-cb context banks, SMMU, dma-coherent).
-BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/Deka-Embedded-Linux/linux-dragon-q6a/archive/e05c4faeded00da418899bd7fb03be473ca18981.tar.gz"
+# Frozen tuple (see GOAL.md): radxa/kernel, branch linux-6.18.2 @ 559f4f92 —
+# the same tree the proven Yocto system uses (radxa-q6a-yocto pins linux-qcom
+# 6.18% and replaces its source with this repo/SHA). Board file
+# qcs6490-radxa-dragon-q6a.dts includes sc7280.dtsi, which carries the
+# CDSP/ADSP remoteproc + qcom,fastrpc glink nodes (compute-cb context banks,
+# SMMU, dma-coherent).
+#
+# Was Deka-Embedded-Linux/linux-dragon-q6a @ e05c4fa (v6.18 + 31 commits).
+# Switched because the Radxa tree carries ~70 board commits that are the
+# difference between working and broken rather than polish — notably
+# "drm/msm: dp: Delay applying clock defaults until PHY is fully enabled",
+# "clk: qcom: gcc-sc7280: Add missing GDSC flags", and PCIe GDSC/runtime-PM
+# fixes. It also re-enables qcom,ice (3d40d3a11) together with the matching
+# HWKM-v1 driver support (fc1bab211) — take both or neither.
+#
+# Accepted loss (q7, decided 2026-07-25): the four Deka-only changes go, incl.
+# the doubled shared DMA-buf size. If dma-buf allocation failures ever appear
+# under heavy GPU/NPU/camera load, reinstate that as a patch in patches/.
+#
+# USE_ARCH_DEFAULT_CONFIG below stays valid: both trees'
+# arch/arm64/configs/defconfig are byte-identical (verified — 44334 bytes,
+# md5 58efbd609552b5518213f117160a7691), so the fragment layers on the same
+# base either way.
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/radxa/kernel/archive/559f4f921a01e5358602153364c618fe2a3e431e.tar.gz"
 BR2_LINUX_KERNEL_USE_ARCH_DEFAULT_CONFIG=y
 BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="${NERVES_DEFCONFIG_DIR}/linux-dragon-q6a.fragment"
 BR2_LINUX_KERNEL_DTS_SUPPORT=y

@@ -44,6 +44,15 @@ CONFIG_MFD_SPMI_PMIC=y
 CONFIG_ARM_SMMU=y
 CONFIG_ARM_SMMU_QCOM=y
 
+# --- Qualcomm TEE (QTEE): creates /dev/tee0. The base arm64 defconfig already
+# --- ships CONFIG_TEE=y + CONFIG_OPTEE=y, but QCS6490 runs QTEE, not OP-TEE,
+# --- so without this no tee0 ever appears. drivers/tee/qcomtee/Kconfig is a
+# --- tristate that depends on ARCH_QCOM and sits inside `if TEE`, so it only
+# --- sticks because CONFIG_TEE=y is already set. No devicetree node is needed
+# --- (qcom_scm_qtee_init() registers it as a platform device), which matters
+# --- because our DTB comes from the UEFI firmware.
+CONFIG_QCOMTEE=y
+
 # --- Serial console (GENI SE UART -> ttyMSM0) ---
 CONFIG_QCOM_GENI_SE=y
 CONFIG_SERIAL_QCOM_GENI=y
@@ -162,6 +171,14 @@ CONFIG_USB_XHCI_HCD=y
 CONFIG_USB_DWC3=y
 CONFIG_USB_DWC3_QCOM=y
 CONFIG_PHY_QCOM_USB_SNPS_FEMTO_V2=y
+# TYPEC must be =y for the combo PHY to be =y. drivers/phy/qualcomm/Kconfig:62
+# gates PHY_QCOM_QMP_COMBO on `depends on TYPEC || TYPEC=n`, and the base arm64
+# defconfig sets TYPEC=m, which caps the PHY at =m no matter what we ask for
+# here. (Its other gate, `depends on DRM || DRM=n` at :63, is satisfied by the
+# builtin DRM block below.) The combo PHY drives USB3 *and* DisplayPort, which
+# is how HDMI reaches the RA620 bridge, so a modular PHY means no display until
+# udev runs -- i.e. after the BEAM boot.
+CONFIG_TYPEC=y
 CONFIG_PHY_QCOM_QMP_COMBO=y
 CONFIG_USB_STORAGE=y
 CONFIG_USB_UAS=y
@@ -182,6 +199,16 @@ CONFIG_CFG80211=m
 CONFIG_RFKILL=y
 CONFIG_BT=m
 CONFIG_BT_RFCOMM=m
+# The comment above was previously only a comment: we build with
+# BR2_LINUX_KERNEL_USE_ARCH_DEFAULT_CONFIG=y and the arm64 defconfig sets
+# BT_HCIBTUSB to =m, so stock btusb was in fact built. aic_btusb's id table
+# competes with it for the AIC8800D80 BT interface (A69C:8D81, class
+# e0/01/01), which matches BOTH drivers -- whichever udev modprobes first
+# wins. Disable it explicitly, and see rootfs_overlay/etc/modprobe.d/aic8800.conf.
+# CONFIG_BT_HCIBTUSB is not set
+# BT_LE is genuinely needed: the arm64 defconfig overrides its `default y`
+# with `# CONFIG_BT_LE is not set`.
+CONFIG_BT_LE=y
 
 # --- GENI I2C/SPI/QSPI + GPI (GSI) DMA the board buses request ---
 CONFIG_I2C_QCOM_GENI=y
@@ -213,14 +240,44 @@ CONFIG_QCOM_SPMI_TEMP_ALARM=y
 CONFIG_QRTR=y
 CONFIG_QRTR_SMD=y
 
-# --- GPU / display (Adreno 643 + DP -> RA620 HDMI bridge), video,
-# --- audio (AudioReach + WCD9380 codec). Modules: not boot-critical,
+# --- Display/GPU (Adreno 643 + DP -> RA620 HDMI bridge): builtin, mirroring
+# --- the proven q6a-display.cfg (radxa-q6a-yocto c1ecf57) and the Radxa
+# --- vendor config-6.18.2-4-qcom.
+# ---
+# --- These must NOT be modules. ARM_SMMU=y (line 44) probes the adreno SMMU
+# --- at initcall time, and it needs 5 gpucc clocks + GPU_CC_CX_GDSC right
+# --- then. With gpucc=m those arrive only once qcom-coldplug.sh starts udevd
+# --- -- after the whole BEAM boot, long past deferred_probe_timeout -- so the
+# --- SMMU latches -ETIMEDOUT, is dropped from the deferred list and is never
+# --- retried. Every later adreno bind then fails -19.
+# ---
+# --- Partial fixes do not work: Buildroot merges fragments with
+# --- merge_config.sh -m (last duplicate wins) and olddefconfig silently
+# --- demotes DRM_MSM back to =m if any helper stays modular.
+CONFIG_SC_GPUCC_7280=y
+CONFIG_SC_DISPCC_7280=y
+CONFIG_DRM=y
+CONFIG_DRM_KMS_HELPER=y
+CONFIG_DRM_DISPLAY_HELPER=y
+CONFIG_DRM_GEM_SHMEM_HELPER=y
+# SYSFB_SIMPLEFB makes sysfb register a "simple-framebuffer" for simpledrm
+# instead of an "efi-framebuffer" for efifb. The vendor sets it; our base does
+# not. The simple-framebuffer node exists only in the EDK2-supplied DTB, so
+# this depends on the firmware DTB being used (no `devicetree` in grub.cfg).
+CONFIG_SYSFB_SIMPLEFB=y
+CONFIG_DRM_SIMPLEDRM=y
+CONFIG_DRM_SIMPLE_BRIDGE=y
+CONFIG_DRM_DISPLAY_CONNECTOR=y
+# DRM_AUX_BRIDGE is deliberately NOT set here: it is a hidden symbol (bare
+# `tristate`, no prompt, drivers/gpu/drm/bridge/Kconfig:15-16), so a fragment
+# line for it is inert. It follows whatever selects it -- for us
+# `select DRM_AUX_BRIDGE if DRM_BRIDGE` in PHY_QCOM_QMP_COMBO -- so it reaches
+# =y only via CONFIG_TYPEC=y above. Verify it in the merged .config, never here.
+CONFIG_DRM_MSM=y
+CONFIG_DRM_MSM_DP=y
+
+# --- Video + audio (AudioReach + WCD9380 codec). Modules: not boot-critical,
 # --- probed via udev coldplug. Firmware from qcom-dsp-firmware.
-CONFIG_DRM_MSM=m
-CONFIG_DRM_SIMPLE_BRIDGE=m
-CONFIG_DRM_DISPLAY_CONNECTOR=m
-CONFIG_SC_DISPCC_7280=m
-CONFIG_SC_GPUCC_7280=m
 CONFIG_SC_LPASS_CORECC_7280=m
 CONFIG_VIDEO_QCOM_VENUS=m
 CONFIG_QCOM_APR=m
