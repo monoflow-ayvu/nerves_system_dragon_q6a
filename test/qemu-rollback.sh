@@ -89,11 +89,16 @@ echo "[*] Firmware: $FW"
 
 # --- helpers -------------------------------------------------------------------
 
-# boot_qemu <stop-regex>: boot the disk, stream serial to $SERIAL_LOG, stop
-# when the regex appears (or on BOOT_TIMEOUT). Fresh EDK2 vars per call are
-# NOT used - UEFI boot entries don't matter here (removable-media path).
+# boot_qemu <stop-regex> [grace-seconds]: boot the disk, stream serial to
+# $SERIAL_LOG, stop when the regex appears (or on BOOT_TIMEOUT). Fresh EDK2
+# vars per call are NOT used - UEFI boot entries don't matter here
+# (removable-media path).
+#
+# grace-seconds (default 5) is how long the guest keeps running AFTER the stop
+# regex matches, so in-flight ESP / uboot-env writes can land before we pull
+# the plug. Phase 1 needs much more than the default - see the note there.
 boot_qemu() {
-    local stop_re="$1" waited=0
+    local stop_re="$1" grace="${2:-5}" waited=0
     : > "$SERIAL_LOG"
     tail -n +1 -f "$SERIAL_LOG" &
     TAIL_PID=$!
@@ -118,9 +123,8 @@ boot_qemu() {
         fi
         sleep 2; waited=$((waited + 2))
     done
-    # Give the guest a moment to finish in-flight ESP writes (autovalidate
-    # runs just before IEx), then stop.
-    sleep 5
+    # Let in-flight ESP / uboot-env writes finish, then stop.
+    sleep "$grace"
     kill "$QEMU_PID" 2>/dev/null || true
     wait "$QEMU_PID" 2>/dev/null || true
     QEMU_PID=""
@@ -169,17 +173,35 @@ rm -f "$CODE"; cp "$EDK2_CODE_FD" "$CODE"; chmod u+w "$CODE"; truncate -s 64M "$
 VARS="$WORK_DIR/edk2-vars.fd"
 rm -f "$VARS"; truncate -s 64M "$VARS"
 
-# --- Phase 1: upgrade to slot B, boot, expect autovalidate ----------------------
+# --- Phase 1: upgrade to slot B, boot, expect StartupGuard to validate ----------
+#
+# Validation is NOT done by fwup autovalidate any more: the system ships
+# nerves_fw_autovalidate=0 on purpose (fwup.conf), because validating from
+# qcom-coldplug.sh marked a slot good before the BEAM had even started, which
+# defeated rollback entirely. What clears the trial state now is StartupGuard,
+# which waits for every expected OTP application to start and only then calls
+# Nerves.Runtime.validate_firmware/0 (example/config/target.exs).
+#
+# StartupGuard's retry delay is 10 s (nerves_runtime startup_guard.ex
+# @retry_delay), so on a fresh slot it validates ~10 s AFTER the IEx prompt
+# appears. Stopping at the prompt with the default 5 s grace raced it and
+# reported a false failure, so Phase 1 asks for a 30 s grace instead.
+#
+# Do NOT try to gate on StartupGuard's "Firmware validated successfully" log
+# line: Nerves routes Logger into an in-memory ring buffer
+# (`config :logger, backends: [RingLogger]`, example/config/target.exs), so it
+# never reaches the serial console and the regex can only ever time out. The
+# on-disk state below is the authoritative evidence that validation ran.
 echo
-echo "[*] PHASE 1: fwup upgrade -> boot slot B -> on-target autovalidate"
+echo "[*] PHASE 1: fwup upgrade -> boot slot B -> StartupGuard validates"
 fwup -a -d "$DISK_IMG" -i "$FW" -t upgrade
 [ "$(grubenv_var validated)" = "0" ] || { echo "!! expected validated=0 after upgrade"; exit 1; }
-boot_qemu "Interactive Elixir|iex\("
+boot_qemu "Interactive Elixir|iex\(" 30
 
 echo "==================== PHASE 1 VERDICT ===================="
 check "GRUB booted slot B"              "grep -qE 'Booting slot B' '$SERIAL_LOG'"
 check "IEx console reached"             "grep -qE 'Interactive Elixir|iex\(' '$SERIAL_LOG'"
-check "grubenv validated=1 (autovalidate wrote the ESP)" "[ \"\$(grubenv_var validated)\" = '1' ]"
+check "grubenv validated=1 (StartupGuard wrote the ESP)" "[ \"\$(grubenv_var validated)\" = '1' ]"
 check "uboot-env nerves_fw_validated=1" "[ \"\$(uboot_var nerves_fw_validated)\" = '1' ]"
 check "uboot-env nerves_fw_active=b"    "[ \"\$(uboot_var nerves_fw_active)\" = 'b' ]"
 

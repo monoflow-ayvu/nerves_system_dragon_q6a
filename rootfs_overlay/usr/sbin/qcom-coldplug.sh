@@ -12,8 +12,13 @@ set -e
 # 0. A/B slot bookkeeping (see grub.cfg + fwup-ops.conf):
 #    - reconcile: if GRUB auto-fell-back to the other slot, sync
 #      nerves_fw_active with the slot that actually mounted /.
-#    - autovalidate: when nerves_fw_autovalidate=1, a freshly upgraded slot
-#      that boots this far validates itself so GRUB keeps booting it.
+#    - autovalidate: OFF by default (nerves_fw_autovalidate=0 in fwup.conf).
+#      Validating here would only prove the kernel booted and erlinit ran,
+#      which lets a crash-looping Elixir release mark itself good and
+#      defeats the whole point of the GRUB boot-once budget. The
+#      application validates instead, via Nerves.Runtime.StartupGuard.
+#      The call below stays because it is a no-op when the variable is 0,
+#      and it preserves the opt-in for headless images that set it to 1.
 #    Never let bookkeeping failures block the app from starting.
 #    NOTE: probe fwup by absolute path. The nerves-common busybox has no
 #    `command` builtin (ASH_CMDCMD off), so `command -v fwup` here fails

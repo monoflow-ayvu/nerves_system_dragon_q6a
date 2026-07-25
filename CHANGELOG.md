@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+Bringing the system to parity with the hardware-proven `radxa-q6a-yocto`
+reference. See `PORTING-FROM-YOCTO.md` for the full comparison and
+`PORTING-FINDINGS.md` for the raw findings.
+
+- **Use the firmware-provided device tree** (B1). `grub.cfg` no longer
+  issues a `devicetree` command. The board's SPI-NOR EDK2 compiles the
+  board DTS and publishes the DTB via the EFI configuration table
+  (`EFI_DEVICE_TREE_GUID`); on arm64 GRUB forwards it to the kernel
+  automatically when no `devicetree` is issued. Our previous behaviour
+  *replaced* that DTB wholesale, discarding the firmware's runtime fixups
+  (memory map and reserved-memory carveouts that must agree with what
+  XBL/TZ set up), which surfaces as SMMU faults or ADSP/CDSP remoteproc
+  load failures rather than a clean error. The hardware-proven Yocto image
+  installs no device tree at all. The DTB we build is still produced and is
+  now installed at `/usr/share/dtb/` as a bench reference for diffing
+  against `/sys/firmware/devicetree/base`. This also removes the
+  Secure-Boot-must-be-off constraint, which only ever applied to
+  `devicetree`.
+
 ## v0.5.4
 
 - **QEMU tests: `-cpu cortex-a76` instead of `-cpu max`** (overridable

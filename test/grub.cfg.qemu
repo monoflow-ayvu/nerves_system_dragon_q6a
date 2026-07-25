@@ -1,13 +1,15 @@
 # QEMU-virt variant of grub.cfg, written onto the ESP by qemu-smoke.sh.
 #
 # Differences from the real-hardware grub.cfg:
-#   - console=ttyAMA0 (QEMU -M virt PL011) instead of ttyMSM0.
-#   - NO `devicetree` command: under QEMU the EDK2 firmware exposes the
-#     machine's auto-generated virt DTB via an EFI config table, and the
-#     kernel's EFI stub picks it up. Installing the qcs6490 board DTB here
-#     would describe hardware QEMU doesn't emulate.
+#   - console=ttyAMA0 (QEMU -M virt PL011) instead of ttyMSM0, and a
+#     louder loglevel.
 #   - The rootfs still mounts by PARTUUID probed from the boot disk, so no
 #     assumptions about /dev/vda vs /dev/sda.
+#
+# Both configs now take the DTB from the firmware's EFI configuration table
+# and issue no `devicetree` command: AAVMF publishes the virt machine's DTB
+# here, the board's EDK2 publishes the qcs6490 board DTB on hardware. This
+# used to be the one real behavioural difference between the two files.
 
 load_env
 
@@ -35,7 +37,7 @@ if [ -z "$nerves_disk" ]; then
     set nerves_disk=hd0
 fi
 
-set nerves_cmdline="console=ttyAMA0,115200 earlycon loglevel=7 rootfstype=squashfs rootwait ro"
+set nerves_cmdline="console=ttyAMA0,115200 earlycon loglevel=7 rootfstype=squashfs rootwait ro net.ifnames=0"
 
 if [ "$boot" = "1" ]; then
     probe --set=nerves_root_uuid --part-uuid ($nerves_disk,gpt3)

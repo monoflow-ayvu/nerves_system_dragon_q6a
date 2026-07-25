@@ -8,8 +8,9 @@ build, run, read the errors, fix, repeat.
 ## Mission
 
 Custom Nerves system (Buildroot) for the **Radxa Dragon Q6A**
-(Qualcomm QCS6490) with an **NPU-ready userspace**: kernel + DTB with the
-FastRPC/remoteproc/GLINK stack and reserved-memory regions, the Hexagon
+(Qualcomm QCS6490) with an **NPU-ready userspace**: a kernel carrying the
+FastRPC/remoteproc/GLINK stack, driven by the firmware-supplied device tree
+(reserved-memory regions come from the SPI-NOR EDK2 DTB), the Hexagon
 CDSP firmware + DSP shell + FastRPC userspace pre-installed and
 version-matched, booting through the board's native Qualcomm UEFI chain
 into BEAM-as-init.
@@ -34,7 +35,9 @@ be validated *without* the board must be validated here first.
       SMMU) **and** virtio (blk/net/pci) - same kernel boots QEMU. Built OK.
 - [x] DTB `qcs6490-radxa-dragon-q6a.dtb` built; DTS verified to declare
       CDSP/ADSP reserved-memory + `qcom,fastrpc` glink nodes (compute-cb
-      context banks). No patch needed. (Loaded by GRUB `devicetree` on HW.)
+      context banks). No patch needed. NOT loaded at boot: the SPI-NOR EDK2
+      supplies the DTB via the EFI configuration table and grub.cfg issues
+      no `devicetree`. Ours is kept at /usr/share/dtb for bench diffing.
 - [x] Buildroot packages: `qcom-dsp-firmware` (harvest drop-in),
       `qcom-dsp-shell` (`fastrpc_shell_unsigned_3` + skels),
       `qcom-fastrpc` (built from source: libcdsprpc/libadsprpc/cdsprpcd/
@@ -74,9 +77,10 @@ be validated *without* the board must be validated here first.
   than `nerves_system_x86_64_uefi`.
 - **Boot:** on-board Qualcomm UEFI → `\EFI\BOOT\BOOTAA64.EFI` (GRUB2
   arm64-efi from Buildroot) on ESP → `load_env` A/B slot select →
-  `devicetree` + `linux` loaded **from inside the slot's squashfs**
-  (`/boot/Image`, `/boot/qcs6490-radxa-dragon-q6a.dtb`) so kernel+DTB+
-  rootfs upgrade atomically. Fallback if UEFI won't load GRUB: keep
+  `linux` loaded **from inside the slot's squashfs** (`/boot/Image`) so
+  kernel+rootfs upgrade atomically. The DTB comes from the SPI-NOR EDK2 via
+  the EFI configuration table; grub.cfg installs none.
+  Fallback if UEFI won't load GRUB: keep
   Radxa's embloader on the ESP and generate BLS entries instead
   (documented in README, not implemented unless needed).
 - **A/B failback:** GRUB-side (grubenv booted_once/validated flags),
@@ -104,10 +108,17 @@ be validated *without* the board must be validated here first.
 
 ### Research findings (2026-07-02, corroborated)
 
-- **Boot design validated by Armbian:** their `qcs6490` kernel family uses
-  the `grub-with-dtb` extension - GRUB on the ESP loads the kernel *and*
-  installs the DTB (`devicetree` command), `SERIALCON=ttyMSM0`. This is
-  exactly our grub.cfg. Secure Boot must be off for GRUB's `devicetree`.
+- **Boot design partly validated by Armbian:** their `qcs6490` kernel family
+  uses the `grub-with-dtb` extension with `SERIALCON=ttyMSM0`.
+  **SUPERSEDED (2026-07-25):** we no longer copy the `grub-with-dtb` part.
+  The Dragon Q6A's SPI-NOR EDK2 publishes the board DTB via the EFI
+  configuration table and that is the DTB the OS must use; GRUB's
+  `devicetree` would replace it wholesale and drop its runtime fixups. The
+  hardware-proven Yocto image (`radxa-q6a-yocto`) installs no device tree
+  at all - `grep devicetree` over its whole board layer returns nothing.
+  Dropping the command also removes the Secure-Boot-must-be-off constraint,
+  since that restriction only ever applied to `devicetree`.
+  See `PORTING-FROM-YOCTO.md` §2 and B1.
 - **Console:** board DTS `stdout-path = "serial0:115200n8"`, `serial0 =
   &uart5` (GENI SE UART → `ttyMSM0`).
 - **FastRPC memory model:** mainline sc7280 uses the **dma_heap + SMMU**

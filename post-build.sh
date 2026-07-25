@@ -42,15 +42,21 @@ cp $BINARIES_DIR/efi-part/EFI/BOOT/bootaa64.efi $BINARIES_DIR/bootaa64.efi
 cp $NERVES_DEFCONFIG_DIR/grub.cfg $BINARIES_DIR
 
 # Remove any grub config the kernel/bootloader packages left in the target.
-# GRUB lives on the ESP; the kernel image and DTB must stay at /boot inside
-# the squashfs.
+# GRUB lives on the ESP; the kernel image must stay at /boot inside the
+# squashfs.
 rm -rf $TARGET_DIR/boot/grub
 
 # The kernel Image is installed to /boot by BR2_LINUX_KERNEL_INSTALL_TARGET.
-# Also place the board DTB next to it so grub.cfg can `devicetree` it from
-# the same squashfs.
+#
+# The board DTB is NOT on the boot path: the SPI-NOR EDK2 firmware hands the
+# kernel its own DTB through the EFI configuration table, and grub.cfg
+# deliberately issues no `devicetree` command. Keep the DTB we build as a
+# bench reference only, so it can be diffed against the firmware's:
+#   dtc -I fs -O dts /sys/firmware/devicetree/base > /tmp/fw.dts
+#   dtc -I dtb -O dts /usr/share/dtb/qcs6490-radxa-dragon-q6a.dtb > /tmp/ours.dts
 if [ -e $BINARIES_DIR/qcs6490-radxa-dragon-q6a.dtb ]; then
-    install -m 0644 $BINARIES_DIR/qcs6490-radxa-dragon-q6a.dtb $TARGET_DIR/boot/
+    install -D -m 0644 $BINARIES_DIR/qcs6490-radxa-dragon-q6a.dtb \
+        $TARGET_DIR/usr/share/dtb/qcs6490-radxa-dragon-q6a.dtb
 fi
 
 # Compile the runtime firmware operations (revert/validate/factory-reset)

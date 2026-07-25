@@ -41,6 +41,16 @@
 ## Enable heartbeat monitoring of the Erlang runtime system
 -heart -env HEART_BEAT_TIMEOUT 120 -env HEART_INIT_GRACE_TIME 120
 
+## Require an initialization handshake within 15 minutes.
+## Nerves.Runtime.StartupGuard (enabled in config/target.exs) calls
+## Nerves.Runtime.Heart.init_complete/0 once it has registered its heart
+## callback; without this env var that handshake has no window and the guard
+## cannot catch a VM that starts but hangs before StartupGuard runs.
+## 900 matches StartupGuard's own @give_up_minutes 15
+## (deps/nerves_runtime/lib/nerves_runtime/startup_guard.ex:91) and the value
+## documented at deps/nerves_runtime/lib/nerves_runtime/heart.ex:93.
+-env HEART_INIT_TIMEOUT 900
+
 ## Start the Elixir shell
 
 -noshell

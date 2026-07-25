@@ -37,26 +37,30 @@ We only replace the payload above UEFI. The UEFI firmware loads
 `\EFI\BOOT\BOOTAA64.EFI` from the ESP - that's **GRUB 2** (built by
 Buildroot for `arm64-efi`). GRUB:
 
-1. reads `/EFI/BOOT/grubenv` to select the active A/B slot,
-2. installs the board device tree with its `devicetree` command
-   (`/boot/qcs6490-radxa-dragon-q6a.dtb`, loaded from *inside* the slot's
-   squashfs), then
-3. loads the kernel (`/boot/Image`) from the same squashfs.
+1. reads `/EFI/BOOT/grubenv` to select the active A/B slot, then
+2. loads the kernel (`/boot/Image`) from inside that slot's squashfs.
 
-Kernel, DTB and rootfs therefore always upgrade together with the slot. The
+Kernel and rootfs therefore always upgrade together with the slot. The
 kernel boots with `root=PARTUUID=...` probed from whichever disk GRUB was
 loaded from, so one image works from microSD, UFS or USB. There is no
 initrd: everything needed to mount the squashfs root (SD/UFS, squashfs) and
 to bring up the CDSP (FastRPC/remoteproc/GLINK) is built into the kernel.
 
-This mirrors how **Armbian** boots the same board (its `qcs6490` kernel
-family uses `grub-with-dtb` and `SERIALCON=ttyMSM0`), and structurally
-follows `nerves_system_x86_64_uefi` / `nerves_system_orangepi6`
-(GRUB-on-ESP, A/B slots in `grubenv`, a u-boot-format KV block used only as
-a provisioning data store - no U-Boot involved).
+**The device tree comes from the firmware, not from us.** The SPI-NOR EDK2
+compiles the board DTS at build time and publishes the DTB through the EFI
+Configuration Table (`EFI_DEVICE_TREE_GUID`); on arm64 GRUB forwards it to
+the kernel automatically so long as no `devicetree` command is issued. We
+must use it: it carries runtime fixups a statically built DTB cannot have -
+the memory map and reserved-memory carveouts that have to agree with what
+XBL/TZ already established. Overriding it does not fail cleanly, it shows up
+as SMMU faults or ADSP/CDSP remoteproc load failures. The DTB we build is
+kept at `/usr/share/dtb/` purely as a bench reference to diff against
+`/sys/firmware/devicetree/base`.
 
-**Secure Boot must be off** in the UEFI setup menu: GRUB disables its
-`devicetree` command under Secure Boot.
+Structurally this follows `nerves_system_x86_64_uefi` /
+`nerves_system_orangepi6` (GRUB-on-ESP, A/B slots in `grubenv`, a
+u-boot-format KV block used only as a provisioning data store - no U-Boot
+involved).
 
 ### A/B updates with automatic rollback
 
@@ -73,10 +77,23 @@ a provisioning data store - no U-Boot involved).
    previous slot and re-marks it valid. `qcom-coldplug.sh` then runs
    `fwup -t reconcile` to sync `nerves_fw_active` with the slot that
    actually booted.
-4. Validation: with `nerves_fw_autovalidate=1` (the shipped default) the
-   new slot validates itself at boot via `fwup -t autovalidate` once it
-   reaches erlinit's pre-run hook. Set it to `0` (e.g. NervesHub) to
-   require an explicit `Nerves.Runtime.validate_firmware/0` instead.
+4. Validation is the **application's** job. `nerves_fw_autovalidate=0` is
+   the shipped default, so nothing validates before the BEAM is up.
+   `Nerves.Runtime.StartupGuard` (enabled in `example/config/target.exs`,
+   with `HEART_INIT_TIMEOUT` in `rel/vm.args.eex`) waits for every expected
+   OTP application to start and then calls
+   `Nerves.Runtime.validate_firmware/0`. A release that crash-loops or
+   whose applications never start is therefore never validated, and the
+   next reboot rolls back.
+
+   Set `nerves_fw_autovalidate=1` for a headless image with no
+   application-layer health signal: `qcom-coldplug.sh` then validates via
+   `fwup -t autovalidate` at erlinit's pre-run hook, as before. Note this
+   only proves the kernel booted — it cannot catch a bad release.
+
+5. An upgrade is **refused** while the running slot is still an
+   unvalidated trial, so one bad deployment cannot overwrite the last
+   known-good slot and leave both unbootable.
 
 On-device revert/validate/factory-reset live in `/usr/share/fwup/ops.fw`
 (`fwup-ops.conf`); `revert` writes the target slot's *pre-validated*

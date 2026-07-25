@@ -423,12 +423,25 @@ Measured on our own image: boot sector at LBA 2048 of `test/work/rollback-disk.i
 `ours:fwup.conf:61-62` and `ours:fwup-ops.conf:61-62` both define `BOOT_PART_COUNT, 65536` (32 MiB), and
 `fat_mkfs` at 32 MiB picks FAT16. UEFI 2.x §13.3.1 mandates FAT32 for a fixed-media ESP.
 
-**Fix — in both files:**
+**Fix — in both files. IMPLEMENTED as 256 MiB, not 128:**
 ```
-define(BOOT_PART_COUNT, 262144)  # 128 MiB, FAT32 (fwup fat_mkfs picks FAT16 at 32 MiB)
+define(BOOT_PART_COUNT, 524288)  # 256 MiB, FAT32
 ```
-If B6 leaves systemd-boot on the table, size this at **262144 or larger** now (≥ 192 MiB if you want room for two
-kernels + initramfs) — growing the ESP later is a re-flash, not an OTA.
+Sized once, generously, because the trade is asymmetric: over-sizing costs unused disk, while under-sizing costs a
+re-flash of every deployed board (growing the ESP shifts every partition — it is not an OTA). 256 MiB also leaves
+room for the systemd-boot fallback in B6, which needs two kernels on the ESP.
+
+**Threshold measured directly with our own fwup 1.15.1** rather than taken on trust — `fat_mkfs` at each size, then
+reading the FS-type string out of the boot sector at LBA 2048:
+
+| ESP size | blocks | BPB field | FS type |
+|---|---|---|---|
+| 32 MiB | 65536 | offset 54 | `FAT16` |
+| 48 MiB | 98304 | offset 82 | `FAT32` |
+| 128 MiB | 262144 | offset 82 | `FAT32` |
+| **256 MiB** | **524288** | offset 82 | **`FAT32`** |
+
+So the FatFs crossover is just above 32 MiB (cluster count > 65525), and anything ≥ 48 MiB is FAT32.
 The FatFs crossover is just **above 32 MiB**, not 64: measured 32 MiB → FAT16; 48/64/96/128/512 MiB → FAT32. Anything
 ≥ 48 MiB works. Also update the ASCII layout comments at `ours:fwup.conf:49` and `ours:fwup-ops.conf:50`.
 `ROOTFS_A_PART_OFFSET` moves 67584 → 264192 via the existing `define-eval`; both tests hardcode only offset 2048 and
@@ -697,6 +710,38 @@ actions lives in the appendix table below.
 | q7 | Does the Deka doubled DMA-buf size matter for our workload? | Required before B7; if yes, carry as a patch. |
 | q8 | Is ONNX/QNN inference in scope? | If yes: needs **glibc ≥ 2.34** in the Nerves toolchain (`onnxruntime_qnn` is `manylinux_2_34`), and several hundred MB against a 2 GiB slot cap (`ours:fwup.conf:65,111`). Verify the toolchain first. |
 | q9 | 4096-byte sector media (UFS)? | Both fwup layouts assume 512-byte logical sectors; the Yocto machine conf at least flags it (`QCOM_VFAT_SECTOR_SIZE`). |
+
+---
+
+## 5.4 Implementation status
+
+Phase 1 (the fixes needing no hardware) is **implemented**; see the `Unreleased` section of `CHANGELOG.md`.
+
+| Item | Status | Evidence |
+|---|---|---|
+| B1 DTB override removed | done | no `devicetree` on any boot path; `fdt` kept in the GRUB module list |
+| M5 `net.ifnames=0` | done | present in both `ours:grub.cfg` and `ours:test/grub.cfg.qemu` |
+| M1 ESP → FAT32 @ 256 MiB | done | measured FAT32 with fwup 1.15.1 (table above) |
+| M2 refuse unvalidated upgrade | done | functionally tested — see below |
+| B5 validate after app start | done | `startup_guard_enabled: true` + `HEART_INIT_TIMEOUT 900` |
+| Phase 1 QEMU regression | **pending** | needs a full Buildroot rebuild |
+
+**M2 was verified functionally, not just by inspection.** Against a real disk image with fwup 1.15.1:
+
+1. factory install (`complete`) → `nerves_fw_validated=1`
+2. `fwup -t upgrade` → allowed, writes slot B, sets `validated=0` (trial)
+3. `fwup -t upgrade` again → **refused**, `rc=1`, with the `upgrade.unvalidated.b` message
+4. `fwup -t validate` (ops.fw) → `Validating slot B`, `rc=0`
+5. `fwup -t upgrade` → allowed again (`Upgrading partition A`), `rc=0`
+
+Note step 3 only exercises the guard through the `upgrade` **prefix**, which is how Nerves invokes it. An explicit
+`-t upgrade.a` reports `Couldn't find applicable task` instead, because fwup does not fall through on exact-name
+selection — worth knowing when testing by hand.
+
+B5's `startup_guard_enabled` option and the 900 s heart timeout were confirmed against the vendored dependency, not
+assumed: `example/deps/nerves_runtime/lib/nerves_runtime/application.ex:24-25` reads the option,
+`.../startup_guard.ex:91` sets `@give_up_minutes 15`, and `.../heart.ex:93` documents `HEART_INIT_TIMEOUT 900`. (The
+`StartupGuard` moduledoc suggests 600; 900 is used so the heart window matches the guard's own give-up.)
 
 ---
 
