@@ -103,6 +103,19 @@ BR2_PACKAGE_QAIRT_RUNTIME=y
 # on the HTP. The EP is a shared provider that onnxruntime dlopen()s, and its
 # QNN backend is qairt-runtime's /usr/lib/libQnnHtp.so.
 BR2_PACKAGE_ONNXRUNTIME_QNN=y
+# Python 3.14 + numpy, so the upstream onnxruntime / onnxruntime_qnn cp314
+# aarch64 wheels can be run as a reference implementation against the Rust
+# `ort` path. Buildroot 2026.05 ships exactly 3.14.5, which is the ABI those
+# wheels require. flatbuffers and ml-dtypes are onnxruntime's own imports.
+# The wheels themselves are NOT vendored: unzip them and drop the tree on the
+# device, then run with PYTHONPATH pointing at it (see WORKING_NOTES).
+BR2_PACKAGE_PYTHON3=y
+BR2_PACKAGE_PYTHON3_ZLIB=y
+BR2_PACKAGE_PYTHON3_SSL=y
+BR2_PACKAGE_PYTHON3_PYEXPAT=y
+BR2_PACKAGE_PYTHON_NUMPY=y
+BR2_PACKAGE_PYTHON_FLATBUFFERS=y
+BR2_PACKAGE_PYTHON_ML_DTYPES=y
 BR2_PACKAGE_NBTTY=y
 BR2_PACKAGE_ERLANG_28=y
 BR2_PACKAGE_NERVES_CONFIG=y

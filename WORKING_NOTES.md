@@ -366,6 +366,65 @@ the earlier `Unable to get platform info: Failed to get HTP arch` suggests the E
 talking to the DSP properly — possibly needing `soc_model` alongside `htp_arch`, or the unsigned-PD
 `fastrpc_shell_unsigned_3` reachable in the same `DSP_LIBRARY_PATH`.
 
+### *** THE NPU WORKS. Full recipe. ***
+
+Proven by onnxruntime's own placement report (session log severity VERBOSE):
+```
+Node placements
+ Node(s) placed on [QNNExecutionProvider]. Number of nodes: 1
+   QNNExecutionProvider_5600499331747928002_1
+ Node(s) placed on [CPUExecutionProvider]. Number of nodes: 2
+   QuantizeLinear (QcQuantizeOp_images_q)
+   DequantizeLinear (QcQuantizeOp_output0_dq)
+```
+The whole 1390-node yolov11-pose graph is fused into **one** QNN node on the NPU; only the input
+quantize / output dequantize stay on CPU (normal boundary conversion).
+
+**Seven requirements, all mandatory:**
+1. `ort >= 2.0.0-rc.12` — first version with `Environment::register_ep_library`.
+2. Select via the **V2 device API** (`SessionBuilder::with_devices`), not by appending an
+   `ExecutionProviderDispatch`.
+3. **Register the library as `"QNNExecutionProvider"`, not `"QNN"`.** This is load-bearing and cost
+   the most time: with `"QNN"` the session still succeeds and reports a QNN device, but runs at CPU
+   speed (32.8 ms vs 27.5 ms). `onnxruntime_qnn`'s Python package hardcodes
+   `EP_NAME = "QNNExecutionProvider"` — match it. `Device::ep()` merely echoes whatever name you
+   registered, so it is *not* a way to discover the right one.
+4. Provider options are prefixed with that name: `"QNNExecutionProvider.backend_path"` etc.
+   onnxruntime rewrites them to `ep.qnn.*`, visible in its "Session Options { config_options: {...} }"
+   log line.
+5. QNN backend + V68 skel **must** come from the `onnxruntime_qnn` 2.4.0 wheel, not QAIRT 2.42
+   (`Unable to find a valid interface` / `QNN_DEVICE_ERROR_INVALID_CONFIG`).
+6. `libQnnHtpPrepare.so` (89 MB) required, else the session will not commit
+   (`Conv ... NHWC as requested by QNN, but was not selected by that EP`).
+7. `htp_arch=68` explicitly (auto-detect fails: `Failed to get HTP arch`), and
+   `htp_performance_mode=burst` for the speed — the default mode runs at CPU speed.
+
+Environment that works:
+```sh
+ORT_DYLIB_PATH=/usr/lib/libonnxruntime.so
+LD_LIBRARY_PATH=<qnnlibs>:/usr/lib
+DSP_LIBRARY_PATH="<qnnlibs>;/usr/lib/dsp"     # ';' separated, order matters
+ADSP_LIBRARY_PATH="<qnnlibs>;/usr/lib/dsp"    # qnnlibs FIRST or you get INVALID_CONFIG
+# options: backend_path=<qnnlibs>/libQnnHtp.so, htp_arch=68, htp_performance_mode=burst
+```
+
+**Measured on yolov11-pose-small QDQ (AI Hub), 1x3x640x640, steady state:**
+| config | time |
+|---|---|
+| CPU only | 31431 us |
+| NPU, default power mode | 32655 us |
+| **NPU, burst** | **27461 us** |
+| NPU, sustained_high_performance | 27496 us |
+
+Outputs bit-identical CPU vs NPU — expected for QDQ int8, not a red flag.
+
+**Only 1.14x over CPU, so there is performance left on the table.** Likely causes, in order:
+the per-frame CPU-side `QuantizeLinear` of 1.2M f32 inputs and `DequantizeLinear` of the output
+(use int8/uint8 model I/O to remove it); no context caching
+(`qnn_context_cache_enable` + `qnn_context_cache_path` avoids recompiling and can change scheduling);
+and `libQnnSystem.so` never being mapped, which may indicate a partially degraded path.
+For reference, AI Hub quotes single-digit ms for this model class on QCS6490.
+
 ### Options to actually get the NPU (pick one)
 
 1. **Bump the fork's `ort` to rc.12+ and use plugin registration.** `RegisterExecutionProviderLibrary`
