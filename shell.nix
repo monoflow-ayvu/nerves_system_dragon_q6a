@@ -18,6 +18,13 @@ let
     gnumake
     gcc
 
+    # Rust, for cross-compiling rustler NIFs (ortex) to the board. nixpkgs'
+    # `rustc` ships only the host std, so we need rustup to get the
+    # aarch64-unknown-linux-gnu target:
+    #     rustup toolchain install stable --profile minimal
+    #     rustup target add aarch64-unknown-linux-gnu
+    rustup
+
     # nerves_uevent's NIF #includes <libmnl/libmnl.h>. The target gets this
     # from BR2_PACKAGE_LIBMNL (already enabled), but a HOST build — which is
     # what `mix` does when MIX_TARGET is unset — needs it here or it dies with
@@ -51,6 +58,23 @@ let
     # Install nerves_bootstrap only if it's not already present, so repeated
     # shell/direnv loads stay fast.
     mix archive | grep -q nerves_bootstrap || mix archive.install hex nerves_bootstrap --force 1>&2
+
+    # Put the Nerves cross toolchain on PATH. rustler's cargo invocation needs
+    # to find aarch64-nerves-linux-gnu-gcc by bare name as the linker, and the
+    # rustler :target/:env config in example/config/target.exs is evaluated
+    # before nerves_bootstrap exports CC/CROSSCOMPILE - so PATH is the only
+    # thing we can rely on there.
+    for _tc in $HOME/.local/share/nerves/artifacts/nerves_toolchain_aarch64_nerves_linux_gnu-*/bin; do
+      [ -d "$_tc" ] && export PATH="$_tc:$PATH"
+    done
+
+    # nix's rustup wrapper does NOT create ~/.cargo/bin shims, so put the
+    # installed toolchain's real bin dir on PATH for rustler/cargo to find.
+    export RUSTUP_HOME=$HOME/.rustup
+    export CARGO_HOME=$HOME/.cargo
+    if [ -d "$RUSTUP_HOME/toolchains/stable-x86_64-unknown-linux-gnu/bin" ]; then
+      export PATH="$RUSTUP_HOME/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
+    fi
 
     # Default to the board target, like ../nerves_system_sg2002/shell.nix does.
     # Without this, `cd example && mix firmware` inherits MIX_TARGET=host and

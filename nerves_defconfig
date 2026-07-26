@@ -99,6 +99,10 @@ BR2_PACKAGE_QCOM_DSP_SHELL=y
 BR2_PACKAGE_QCOM_FASTRPC=y
 # QAIRT/QNN runtime blobs (SDK 2.42.0.251225, see blobs/qairt-runtime/README.md)
 BR2_PACKAGE_QAIRT_RUNTIME=y
+# ONNX Runtime 1.28.0 + QNN execution provider, for ortex/Rust `ort` inference
+# on the HTP. The EP is a shared provider that onnxruntime dlopen()s, and its
+# QNN backend is qairt-runtime's /usr/lib/libQnnHtp.so.
+BR2_PACKAGE_ONNXRUNTIME_QNN=y
 BR2_PACKAGE_NBTTY=y
 BR2_PACKAGE_ERLANG_28=y
 BR2_PACKAGE_NERVES_CONFIG=y

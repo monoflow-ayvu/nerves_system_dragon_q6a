@@ -167,6 +167,121 @@ So on bench, first check `dmesg | grep -iE "restarting .* with new firmware|remo
 still be needed is only the *trigger* (something calling `rproc_boot` once the rootfs is up), not
 the retry logic itself.
 
+## ortex + QNN on the HTP (tasks A–E)
+
+Goal: run ONNX models on the NPU from Elixir via `ortex`.
+
+**The finding that makes this cheap:** `ort`'s QNN EP registers through the generic
+`SessionOptionsAppendExecutionProvider(session, "QNN", opts)` (pykeio/ort `src/ep/qnn.rs`), and
+`register()` is *not* feature-gated. onnxruntime `dlopen()`s
+`libonnxruntime_providers_qnn.so` at session creation, so a **stock** libonnxruntime works and
+there is no need to build ONNX Runtime from source against the QAIRT SDK — which matters because
+Qualcomm does not officially support the QNN SDK on aarch64 Linux.
+
+| Task | State |
+|---|---|
+| A. `onnxruntime-qnn` Buildroot package (24 MB) | **DONE**, verified in the artifact |
+| B. Rust cross-compile for aarch64 Nerves | **DONE**, `libortex.so` is an aarch64 ELF |
+| C. Patch ortex for `:qnn` | **DONE**, compiles |
+| D. Test models (fp32 + QDQ int8) | **DONE**, both in `example/priv/` |
+| E. ONNX inference on the board | **DONE** — verified live over SSH |
+| E. QNN/NPU acceleration | **BLOCKED** — see below |
+
+**ONNX Runtime genuinely works on the board**, verified over SSH on hardware:
+```
+Example.NPU.run(:cpu)      -> {:ok, [22.0, 44.0, 66.0, 88.0], 1394}     # (a+b)*2
+Example.NPU.run_qdq(:cpu)  -> {:ok, [38.0, 40.0, ... 52.0], ...}        # QDQ MatMul
+```
+
+### QNN is BLOCKED, and the reason is definitive
+
+```
+Example.NPU.run_qdq(:qnn) -> {:error, "QNN execution provider is not supported in this build. "}
+```
+
+That is onnxruntime's own message. The base `onnxruntime-1.28.0` wheel's `libonnxruntime.so` is
+**not compiled with `--use_qnn`**, so `SessionOptionsAppendExecutionProvider(session, "QNN", ...)`
+is rejected outright.
+
+**My earlier reasoning was wrong.** I read `ort`'s QNN `register()` on the `main` branch, saw it
+call the generic string-based append, and concluded a *stock* libonnxruntime plus
+`libonnxruntime_providers_qnn.so` would work. That is how the **old built-in/shared-provider** model
+worked. But ORT 1.28 + `onnxruntime_qnn` 2.4.0 is the **plugin EP** model, which requires
+`RegisterExecutionProviderLibrary(env, name, library_path)` (ORT >= 1.23 C API). The DeepWiki page
+said exactly this and I explicitly discounted it in favour of the source. Wrong call; it cost a
+build/flash cycle.
+
+Corroborating evidence gathered before the error message existed:
+- `/proc/self/maps` after a `:qnn` run: `libonnxruntime` **mapped**,
+  `libonnxruntime_providers_qnn.so` and `libQnnHtp` **never mapped** -> ORT never even dlopen'd the
+  provider.
+- Falsification test: pointing `ORTEX_QNN_BACKEND_PATH` at `/nonexistent/libQnnHtp.so` still
+  returned *correct numbers, faster*. Matching output values prove **nothing**.
+
+### Two traps that made this hard to see, both now fixed in the fork
+
+1. `ort`'s `apply_execution_providers()` (`src/execution_providers/mod.rs:231-259`) **swallows**
+   registration failures unless the dispatch has `.error_on_failure()`, then returns `Ok(())` and
+   lets onnxruntime fall back to CPU.
+2. ortex has `// tracing_subscriber::fmt::init();` **commented out** (`model.rs:39-40`), so ort's
+   `tracing::error!("An error occurred when attempting to register ...")` goes nowhere.
+
+Together: a QNN session that silently runs on CPU, with correct results and no diagnostics. Our
+fork now calls `.error_on_failure()` on the QNN dispatch, which is what surfaced the real message.
+`Example.NPU.prove_qnn/1` automates the falsification check and returns
+`:qnn_genuinely_used | :silently_on_cpu | :inconclusive`.
+
+### Options to actually get the NPU (pick one)
+
+1. **Bump the fork's `ort` to rc.12+ and use plugin registration.** `RegisterExecutionProviderLibrary`
+   exists in newer ort (`src/environment.rs`, `src/ep/mod.rs`, `ort-sys`). Cost: rc.8 -> rc.12 is an
+   API break for ortex's session/tensor code. ~1-2 days. **Recommended.**
+2. Build ONNX Runtime from source with `--use_qnn` for aarch64 Linux. Multi-day, and Qualcomm does
+   not officially support the QNN SDK on aarch64 Linux (microsoft/onnxruntime#21203).
+3. Python + the wheels `radxa-q6a-yocto` already validated on this SoC. Proven, but adds CPython +
+   numpy to the image and abandons the Elixir-native path.
+
+Note `libonnxruntime_providers_qnn.so` ships mode 0644 while our other libs are 0755. `dlopen`
+does not require `+x`, and it is not the cause here, but worth normalising if the plugin path is
+pursued.
+
+**A** — `package/onnxruntime-qnn` + `blobs/onnxruntime-qnn` vendor 3 libs from the same upstream
+wheels `radxa-q6a-yocto` validated (cached at `radxa-q6a-yocto/build/downloads/`):
+`libonnxruntime.so.1.28.0`, `libonnxruntime_providers_shared.so`,
+`libonnxruntime_providers_qnn.so`. We deliberately do **not** vendor the wheel's own QNN backend —
+`blobs/qairt-runtime` already ships a board-validated QAIRT 2.42 set, and a second one would
+collide on `/usr/lib/libQnnHtp.so` and on the `libQnnHtpV68Skel.so` name in `DSP_LIBRARY_PATH`.
+Accepted risk: ORT 1.28's EP was built against its own bundled QNN, not 2.42. See
+`blobs/onnxruntime-qnn/README.md` for the fallback if the EP rejects the backend.
+
+**B** — the recipe that works:
+```sh
+RB=$HOME/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin
+TC=$HOME/.local/share/nerves/artifacts/nerves_toolchain_aarch64_nerves_linux_gnu-linux_x86_64-15.3.0
+export PATH=$RB:$TC/bin:$PATH
+export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-nerves-linux-gnu-gcc
+export CC_aarch64_unknown_linux_gnu=aarch64-nerves-linux-gnu-gcc
+cargo build --release --target aarch64-unknown-linux-gnu
+```
+Notes: nixpkgs `rustc` ships only the host std, so a rustup toolchain is needed
+(`rustup target add aarch64-unknown-linux-gnu`); rustup's binaries *do* run on NixOS unpatched.
+nix's rustup wrapper does **not** create `~/.cargo/bin` shims — call
+`~/.rustup/toolchains/*/bin/cargo` directly. Rust's target triple is
+`aarch64-unknown-linux-gnu` while the toolchain is `aarch64-nerves-linux-gnu`: different vendor,
+same ABI, so linking is fine.
+
+**C** — fork at `../ortex` (`elixir-nx/ortex` @ 55dc3de). Changes:
+- `ort` → `default-features = false, features = ["load-dynamic", "ndarray", "half"]`. Default
+  features enable `download-binaries`, which fetches a **host-arch** libonnxruntime — useless when
+  cross-compiling. `load-dynamic` dlopen()s ours from `ORT_DYLIB_PATH` instead.
+- `constants.rs`: `QNN` const + `qnn` atom.
+- `utils.rs`: `qnn_ep()` using `ORTEX_QNN_BACKEND_PATH` (default `/usr/lib/libQnnHtp.so`), since
+  `map_eps` only receives bare atoms and has nowhere to pass options.
+- `map_eps`'s `_ =>` arm now **warns** before falling back to CPU. Previously a typo'd or
+  unsupported EP atom gave working inference with no acceleration and no error — a silent trap.
+- Perf-mode/profiling intentionally not wired: in rc.8 `PerformanceMode` is not re-exported at the
+  `ort` root, so naming it fails to compile. Revisit if the ort dep is bumped (upstream is rc.12).
+
 ## Decisions and gotchas worth not re-deriving
 
 - **A `SITE_METHOD = local` package does NOT rebuild when you edit its source tree.** Buildroot keys

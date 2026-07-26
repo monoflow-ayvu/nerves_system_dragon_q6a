@@ -41,6 +41,12 @@ defmodule Example.MixProject do
       {:nerves_pack, "~> 0.7"},
       {:nerves_motd, "~> 0.1"},
 
+      # ONNX inference on the Hexagon NPU. Local fork of elixir-nx/ortex that
+      # adds the :qnn execution provider and switches `ort` to load-dynamic so
+      # it uses the system libonnxruntime instead of downloading a host-arch one.
+      {:ortex, path: "../../ortex", override: true},
+      {:nx, "~> 0.6"},
+
       # Allow Nerves.Runtime on host for dev/test.
       {:nerves_runtime, "~> 0.13"},
 

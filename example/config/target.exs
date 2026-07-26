@@ -111,3 +111,40 @@ if authorized_keys == [] do
 end
 
 config :nerves_ssh, authorized_keys: authorized_keys
+
+# ---------------------------------------------------------------------------
+# ortex / ONNX Runtime on the Hexagon NPU
+# ---------------------------------------------------------------------------
+# Cross-compile the rustler NIF for the board. Rust's triple is
+# aarch64-unknown-linux-gnu while the Nerves toolchain is
+# aarch64-nerves-linux-gnu -- different vendor, same ABI, so linking works.
+# CROSSCOMPILE is exported by Nerves during `mix firmware` and is the tool
+# prefix, e.g. /path/to/bin/aarch64-nerves-linux-gnu.
+#
+# Requires the Rust target once per machine:
+#     rustup target add aarch64-unknown-linux-gnu
+# This file is only imported when Mix.target() != :host (see config.exs), so the
+# board target is unconditional here. Do NOT try to detect the toolchain from
+# CC/CROSSCOMPILE: Mix evaluates config before nerves_bootstrap exports those,
+# so the check silently fails and rustler builds a HOST .so, which Nerves then
+# rejects with "scrub-otp-release.sh: ERROR: Unexpected executable format".
+#
+# The tool names are therefore bare, and shell.nix puts the Nerves toolchain's
+# bin/ on PATH. Rust's triple is aarch64-unknown-linux-gnu while the toolchain
+# is aarch64-nerves-linux-gnu: different vendor, same ABI, so linking is fine.
+config :ortex, Ortex.Native,
+  target: "aarch64-unknown-linux-gnu",
+  env: [
+    {"CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER", "aarch64-nerves-linux-gnu-gcc"},
+    {"CC_aarch64_unknown_linux_gnu", "aarch64-nerves-linux-gnu-gcc"},
+    {"AR_aarch64_unknown_linux_gnu", "aarch64-nerves-linux-gnu-ar"},
+    # Cargo build scripts and proc macros are compiled and RUN on the build
+    # machine. Nerves exports CC/CFLAGS pointing at the aarch64 toolchain, so
+    # without pinning host tools a host-side C build gets x86 flags like `-m64`
+    # fed to the cross gcc and dies. (Dropping ortex's unused `rustls` removed
+    # the main offender, `ring`, but keep these so the next such dep is safe.)
+    {"CC_x86_64_unknown_linux_gnu", "cc"},
+    {"CXX_x86_64_unknown_linux_gnu", "c++"},
+    {"HOST_CC", "cc"},
+    {"CFLAGS_x86_64_unknown_linux_gnu", ""}
+  ]

@@ -1,0 +1,24 @@
+config BR2_PACKAGE_ONNXRUNTIME_QNN
+	bool "onnxruntime-qnn"
+	depends on BR2_aarch64
+	depends on BR2_TOOLCHAIN_USES_GLIBC
+	select BR2_PACKAGE_QCOM_FASTRPC
+	help
+	  ONNX Runtime 1.28.0 C library plus the Qualcomm QNN execution
+	  provider, for running ONNX models on the HTP/Hexagon NPU.
+
+	  Installs libonnxruntime.so (the C API that Rust `ort` / Elixir
+	  `ortex` load), libonnxruntime_providers_shared.so, and
+	  libonnxruntime_providers_qnn.so. The QNN EP is a *shared provider*:
+	  ONNX Runtime dlopen()s it when a session appends the "QNN" execution
+	  provider, so no custom ONNX Runtime build is required.
+
+	  The QNN backend itself (libQnnHtp.so and the v68 stub/skel pair)
+	  comes from qairt-runtime; point the EP's `backend_path` option at
+	  /usr/lib/libQnnHtp.so.
+
+	  Blobs are vendored from the upstream manylinux aarch64 wheels into
+	  blobs/onnxruntime-qnn/ - see its README. Proprietary QNN pieces are
+	  NOT redistributable.
+
+	  https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html

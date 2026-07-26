@@ -12,6 +12,9 @@ source "$NERVES_DEFCONFIG_DIR/package/qcom-fastrpc/Config.in"
 comment "QAIRT / QNN runtime (proprietary SDK blobs, local dir)"
 source "$NERVES_DEFCONFIG_DIR/package/qairt-runtime/Config.in"
 
+comment "ONNX Runtime + QNN execution provider (for ortex / Rust ort)"
+source "$NERVES_DEFCONFIG_DIR/package/onnxruntime-qnn/Config.in"
+
 endmenu
 
 menu "Dragon Q6A connectivity"
