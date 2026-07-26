@@ -468,6 +468,57 @@ opened. Passing `providers=[(name, opts), "CPUExecutionProvider"]` apparently do
 selects it. So the Elixir/Rust stack is **ahead of** the vendor Python reference, and "just use
 Python" is not an escape hatch here.
 
+### Elixir-facing YOLO: Example.Yolo, and the bug that hid the NPU from Elixir
+
+`example/lib/example/yolo.ex` runs a YOLO ONNX model on an image file end to end:
+`Example.Yolo.detect("/root/bus.jpg")` returns class, score and `{x1,y1,x2,y2}` boxes in the original
+image's coordinates. `load/1` keeps a session, `run/2` returns the raw output tensor for heads the
+decoder does not understand, `bench/2` times it. Verified on-device against the canonical Ultralytics
+test images: bus.jpg -> bus + 4 persons, zidane.jpg -> 2 persons + 2 ties, boxes matching the
+published reference.
+
+**The bug: `System.put_env/2` cannot configure this stack.** Since OTP 21, `os:putenv` writes
+Erlang's own environment table and leaves the OS `environ` alone. So `ORTEX_QNN_BACKEND_PATH`,
+`DSP_LIBRARY_PATH` and friends set from Elixir were invisible to the ortex NIF *and* to the QNN
+libraries' own `getenv`. Every session kept the default `/usr/lib/libQnnHtp.so` - the incompatible
+QAIRT 2.42 build - and ran on the ARM cores, silently. 881 ms/iter before, **43 ms/iter** after.
+
+The fix is in the ortex fork (`4052d41`): `Ortex.load/4` takes a `qnn_opts` keyword list, and keys
+prefixed `env.` are set in the real process environment by the NIF. Elixir callers therefore pass
+configuration as arguments; nothing depends on the environment the BEAM happened to start with.
+
+**What found it: `ORTEX_TRACE`.** ort reports EP registration, device selection and per-node
+placement through `tracing`, and ortex installed no subscriber, so all of it was discarded - which is
+precisely why a silent CPU fallback looked identical to a working session from Elixir. The fork now
+writes that plus onnxruntime's VERBOSE log to a file (a NIF's stdout goes to the console, unreadable
+over ssh). The trace file failing to appear *at all* is what exposed the putenv problem. Three
+hypotheses were burned guessing before instrumenting: `htp_arch`, graph optimization level, and a
+stray unprefixed option key. Instrument first next time.
+
+**Preprocessing, not inference, is the bottleneck.** The obvious Nx implementation
+(`Nx.pad |> Nx.divide |> Nx.transpose`) took **9.0 s** per 640x640 image - 200x the inference it was
+feeding - because there is no EXLA here and BinaryBackend evaluates transpose element-by-element.
+Rewritten as one binary-comprehension pass per channel, emitting the letterbox padding directly as
+f32: **110-165 ms**. Any Nx elementwise or transpose work on image-sized tensors is a trap on this
+target.
+
+**Two traps for anyone benchmarking from a long-lived BEAM**, both now documented in `bench/2`:
+the first QNN session's DSP configuration is cached for the OS process lifetime, so hiding the skel
+later has no effect; and going from a poisoned DSP configuration to a working one **takes the VM
+down** (observed - the node rebooted mid-benchmark). A CPU baseline needs `ep: :cpu_forced` to be
+the first inference after boot, or the standalone `qnn-probe`.
+
+Costs at 640x640 with yolo11s QDQ: preprocess 70-150 ms, HTP inference ~43 ms (~21 fps measured over
+10 iterations), ARM inference ~865 ms. The 43 ms against the probe's 24 ms is ortex marshalling
+~7.7 MB per call (4.9 MB input tensor in, 2.8 MB output out).
+
+**Still on `/root/qnnlibs`.** `Example.Yolo.qnn_opts/1` looks in `/usr/lib/onnxruntime-qnn` first and
+falls back to `/root/qnnlibs`, where the working QNN 2.4.0 set was placed by hand. Shipping it in the
+image means vendoring ~107 MB into `blobs/onnxruntime-qnn/usr/lib/onnxruntime-qnn/` (of which
+`libQnnHtpPrepare.so` is 85 MB) under a prefix that does not collide with qairt-runtime's
+`/usr/lib/libQnnHtp.so`, plus a system rebuild. Not done yet - the licensing question below applies
+to these files too.
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):

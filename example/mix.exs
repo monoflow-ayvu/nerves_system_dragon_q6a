@@ -47,6 +47,13 @@ defmodule Example.MixProject do
       {:ortex, path: "../../ortex", override: true},
       {:nx, "~> 0.6"},
 
+      # JPEG/PNG decoding and resizing for Example.Yolo. A C NIF (stb_image.h),
+      # no libjpeg/libpng needed on the target. cc_precompiler picks the
+      # aarch64-linux-gnu artifact for this target, which needs only GLIBC_2.17
+      # and links nothing but libc - so it drops straight into the firmware and
+      # no source cross-compile is required.
+      {:stb_image, "~> 0.6"},
+
       # Allow Nerves.Runtime on host for dev/test.
       {:nerves_runtime, "~> 0.13"},
 
