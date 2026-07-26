@@ -366,7 +366,50 @@ the earlier `Unable to get platform info: Failed to get HTP arch` suggests the E
 talking to the DSP properly — possibly needing `soc_model` alongside `htp_arch`, or the unsigned-PD
 `fastrpc_shell_unsigned_3` reachable in the same `DSP_LIBRARY_PATH`.
 
-### *** THE NPU WORKS. Full recipe. ***
+### *** CORRECTION: the NPU is NOT doing the compute. ***
+
+**The "NPU CONFIRMED WORKING" claim in commit 8702ebf is WRONG.** It rested on onnxruntime's
+node-placement report, which is necessary but not sufficient. Wall-vs-CPU-time proves the ARM cores
+are doing the work:
+
+```
+CPU only  | 30 iters: wall 835 ms (27.8 ms/iter), process CPU 4650 ms (557% of wall)
+NPU burst | 30 iters: wall 766 ms (25.5 ms/iter), process CPU 4370 ms (570% of wall)
+```
+
+~5.7 ARM cores saturated in *both* cases. If the HTP were computing, process CPU time would be a
+small fraction of wall time. The 27 vs 32 ms differences chased earlier were run-to-run noise, and
+the bit-identical CPU-vs-NPU outputs are explained trivially: it is the same computation on the same
+hardware.
+
+This is the *third* time in this effort that a plausible-looking signal was not proof — matching
+output values, then a 4.8x timing difference, then the placement report. **The trustworthy test for
+"is the accelerator doing it" is wall-clock vs process-CPU-time**, which the probe now reports
+(`ORTEX_ITERS`).
+
+**Most promising lead.** The probe's open file descriptors during inference:
+```
+fastrpc fds: ["/dev/dma_heap/system", "/dev/fastrpc-cdsp-secure"]
+```
+QNN opens the **secure/signed** CDSP domain, not the unsigned one. Everything validated on this
+board uses the **unsigned** PD: `fastrpc_test -a v68` and `qnn-platform-validator` both go through
+`fastrpc_shell_unsigned_3`, and BRINGUP.md §1 records that below the SPI firmware floor QTEE rejects
+unsigned PDs with `0x80000600`. So QNN is likely opening a signed PD it cannot actually run in, then
+falling back to a CPU implementation *inside* its own node — which is exactly consistent with a
+correct placement report and full ARM utilisation.
+
+Next step: force the HTP backend into unsigned PD. In the QNN SDK this is
+`QnnHtpDevice_CustomConfig_t`/`unsignedPD`; check whether ORT's QNN EP exposes it as a provider
+option (the ones we know work are `backend_path`, `htp_arch`, `htp_performance_mode`,
+`htp_graph_finalization_optimization_mode`, `enable_htp_shared_memory_allocator`). If not exposed,
+the C++ EP source or an `ep.qnn.*` session config key is the place to look. A cheap corroboration
+first: check whether `/dev/fastrpc-cdsp` (unsigned) is ever opened instead, e.g. by running the
+probe with the unsigned shell reachable and comparing fds.
+
+Everything below about *loading* the stack is still correct and hard-won; only the
+"it runs on the NPU" conclusion is retracted.
+
+### The stack loads correctly. Full recipe (loading, NOT acceleration).
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):
 ```
