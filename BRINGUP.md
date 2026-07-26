@@ -153,6 +153,41 @@ Two fixes were needed to get here, both easy to lose:
    with `ip: RTNETLINK answers: Operation not supported`. VintageNet prints both symbol names in
    that error, so trust it.
 
+## 3b-3. B2 verdict: SMMU fixed, GPU firmware fixed, display mode still open
+
+**The -110/-19 failure mode is gone.** Making `SC_GPUCC_7280`/`SC_DISPCC_7280` builtin fixed the
+adreno SMMU exactly as B2 predicted: `3d6a000.gmu: Adding to iommu group 1`, the GPU and
+displayport-controller both bind, `msm` initialises.
+
+**But builtin `DRM_MSM` could not load its firmware.** Measured:
+```
+[4.945598] Direct firmware load for qcom/a660_sqe.fw failed with error -2
+[5.004336] VFS: Mounted root (squashfs filesystem) readonly
+```
+59 ms too early — builtin drivers probe during initcalls, `prepare_namespace()` mounts root after
+`do_basic_setup()`, and `adreno_request_fw()` uses `request_firmware_direct()` which never retries.
+The vendor avoids this by shipping an initramfs (`q6a-a.cpio.gz`); we have none.
+Fix: `CONFIG_DRM_MSM=m`, keeping gpucc/dispcc/DRM builtin. Confirmed working:
+```
+[11.352676] loaded qcom/a660_sqe.fw from new location
+[11.365799] loaded qcom/a660_gmu.bin from new location
+[11.378082] [drm] Loaded GMU firmware v3.1.10
+```
+with no return of -110/-19. Side benefit: the shell comes up sooner, because msm no longer delays
+the root mount.
+
+**Still open, in priority order:**
+1. `[drm] Cannot find any crtc or sizes` (x2) — msm's DPU finds no usable mode/connector. HDMI
+   currently works only via the EDK2-initialised framebuffer (simpledrm → msmdrmfb), not via msm's
+   own modesetting. Suspect the DP→HDMI bridge is not described/driven. Check
+   `/sys/class/drm/*/status` and whether an EDID is read.
+2. `qcom-venus aa00000.video-codec: probe … failed with error -110` — this is **M3** (wrong Venus
+   blob), a different root cause from the GPU firmware issue. Do not conflate them.
+3. `gcc-sc7280`/`gpu_cc-sc7280: sync_state() pending due to 3d6a000.gmu` — likely benign: the gmu
+   is claimed by the a6xx driver as a component rather than by its own platform_driver, so the
+   driver core never marks it probed and `sync_state()` stays pending. Confirm it is harmless
+   before spending time on it.
+
 ## 3c. Phase 0 data to capture now that it boots
 
 ```sh

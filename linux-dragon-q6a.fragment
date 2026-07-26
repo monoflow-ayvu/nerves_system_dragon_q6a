@@ -291,7 +291,36 @@ CONFIG_DRM_DISPLAY_CONNECTOR=y
 # line for it is inert. It follows whatever selects it -- for us
 # `select DRM_AUX_BRIDGE if DRM_BRIDGE` in PHY_QCOM_QMP_COMBO -- so it reaches
 # =y only via CONFIG_TYPEC=y above. Verify it in the merged .config, never here.
-CONFIG_DRM_MSM=y
+# DRM_MSM is a MODULE on purpose, unlike the vendor/Yocto config. Measured on
+# hardware 2026-07-26:
+#   [4.945598] Direct firmware load for qcom/a660_sqe.fw failed with error -2
+#   [5.004336] VFS: Mounted root (squashfs filesystem) readonly
+# Builtin drivers probe during initcalls, but prepare_namespace() mounts the
+# root filesystem only after do_basic_setup() returns -- so adreno asked for its
+# firmware 59 ms before /lib/firmware existed. adreno_request_fw() uses
+# request_firmware_direct(), which never retries, so probe failed permanently:
+# "failed to load a660_sqe.fw" -> "Cannot find any crtc or sizes" -> gcc/gpu_cc
+# stuck at "sync_state() pending due to 3d6a000.gmu". The file is present and
+# valid (43292 bytes); there was simply no filesystem yet.
+#
+# The vendor gets away with =y because their ESP ships an initramfs
+# (q6a-a.cpio.gz), which makes firmware reachable at initcall time. We have no
+# initramfs, so =m is the correct adaptation: udev loads msm after the rootfs is
+# mounted, and the firmware is there.
+#
+# This does NOT reintroduce the -110 SMMU failure. That was caused by
+# SC_GPUCC_7280=m starving the adreno SMMU of clocks at its early probe; gpucc
+# and dispcc stay =y above, so the SMMU is still satisfied at initcall. Early
+# console is unaffected: SYSFB_SIMPLEFB + simpledrm own the framebuffer until
+# msm loads, and the simpledrm -> msmdrmfb handover was observed to work.
+#
+# If the GPU ever needs to be up before userspace, the alternative is
+# CONFIG_EXTRA_FIRMWARE (Buildroot supports it -- see buildroot linux.mk:77 --
+# but it needs the blobs installed before the kernel builds plus a dependency
+# edge for our custom qcom-dsp-firmware package).
+CONFIG_DRM_MSM=m
+# DRM_MSM_DP is a bool feature flag *inside* the msm module, not a module of its
+# own, so it stays =y even with DRM_MSM=m (verified in the merged .config).
 CONFIG_DRM_MSM_DP=y
 
 # --- Video + audio (AudioReach + WCD9380 codec). Modules: not boot-critical,
