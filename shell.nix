@@ -82,6 +82,26 @@ let
     # project itself is unaffected: its mix.exs calls set_target() which forces
     # MIX_TARGET=target regardless of this value.
     export MIX_TARGET=dragon_q6a
+
+    # Pin cargo's default target to the board.
+    #
+    # `config :ortex, Ortex.Native, target: ...` in example/config/target.exs is
+    # honoured by `mix deps.compile ortex --force` but NOT by a plain
+    # `mix compile` that happens to recompile ortex's .ex files - that path built
+    # an x86-64 NIF and only surfaced later as
+    # "scrub-otp-release.sh: ERROR: Unexpected executable format". Setting the
+    # target in cargo's own environment makes both Mix paths agree; cargo still
+    # builds build scripts and proc macros for the host by itself.
+    export CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu
+    export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-nerves-linux-gnu-gcc
+    export CC_aarch64_unknown_linux_gnu=aarch64-nerves-linux-gnu-gcc
+    export AR_aarch64_unknown_linux_gnu=aarch64-nerves-linux-gnu-ar
+    # Host-side C in build scripts must use host tools; Nerves exports CC/CFLAGS
+    # for aarch64, which otherwise feeds flags like -m64 to the cross gcc.
+    export CC_x86_64_unknown_linux_gnu=cc
+    export CXX_x86_64_unknown_linux_gnu=c++
+    export CFLAGS_x86_64_unknown_linux_gnu=""
+    export HOST_CC=cc
   '';
 
 in mkShell {

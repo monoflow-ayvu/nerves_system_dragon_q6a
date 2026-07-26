@@ -8,6 +8,18 @@ config :nerves, :erlinit, ctty: ctty
 
 config :logger, backends: [RingLogger]
 
+# XLA-backed Nx. BinaryBackend evaluates elementwise and transpose operations
+# one element at a time, which is unusable on image-sized tensors here - the
+# Example.Yolo preprocessing measured 9.0 s per 640x640 frame through it.
+# The client is lazy: nothing loads libxla_extension.so until Nx runs an op.
+config :nx, default_backend: EXLA.Backend
+config :exla, clients: [host: [platform: :host]], default_client: :host
+
+# Compile `defn` with EXLA rather than running it through Nx's interpreter. This
+# is what fuses a pipeline into one XLA kernel; without it, EXLA.Backend still
+# executes op-by-op with a host round-trip per operation.
+config :nx, default_defn_options: [compiler: EXLA]
+
 # A/B rollback: validate firmware only once the application is actually up.
 #
 # The system ships with nerves_fw_autovalidate=0, so a freshly written slot

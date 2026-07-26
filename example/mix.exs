@@ -1,3 +1,12 @@
+# The `xla` package resolves which precompiled XLA archive to fetch at *its*
+# compile time, from the environment. Mix evaluates this file before compiling
+# any dependency, so this is the place to redirect it at the target's platform -
+# otherwise a target build links EXLA against a host-arch libxla_extension.so.
+if System.get_env("MIX_TARGET") not in [nil, "", "host"] do
+  System.put_env("XLA_TARGET_PLATFORM", "aarch64-linux-gnu")
+  System.put_env("XLA_TARGET", "cpu")
+end
+
 defmodule Example.MixProject do
   use Mix.Project
 
@@ -46,6 +55,11 @@ defmodule Example.MixProject do
       # it uses the system libonnxruntime instead of downloading a host-arch one.
       {:ortex, path: "../../ortex", override: true},
       {:nx, "~> 0.6"},
+
+      # XLA-backed Nx. Needed because BinaryBackend evaluates elementwise and
+      # transpose operations one element at a time: the image preprocessing this
+      # replaces took 9.0 s per frame through it.
+      {:exla, "~> 0.13"},
 
       # JPEG/PNG decoding and resizing for Example.Yolo. A C NIF (stb_image.h),
       # no libjpeg/libpng needed on the target. cc_precompiler picks the

@@ -44,18 +44,24 @@ defmodule Example.Yolo do
 
   ## Performance
 
-  yolo11s QDQ at 640x640, measured on this board:
+  yolo11s QDQ at 640x640 on this board. Ranges are across repeated runs - inference
+  varies 31-44 ms run to run, so a single figure would overstate the precision:
 
   | stage | cost |
   |---|---|
-  | preprocess (decode, letterbox, planar f32) | 70-150 ms, depending on source resolution |
-  | inference on the HTP | ~43 ms (~23 fps) |
+  | JPEG decode (`StbImage.read_file`) | 80 ms (810x1080), 44 ms (1280x720) |
+  | `prepare/2` - resize + letterbox + planar f32 | 52-73 ms |
+  | inference on the HTP | 32-37 ms mean -> **27-31 fps** |
   | inference on the ARM cores | ~865 ms |
 
-  Preprocessing costs more than the inference. It is already hand-written on
-  binaries because the Nx version took 9.0 s per image (there is no EXLA on this
-  target); getting it lower means doing the resize and the planar conversion in a
-  NIF, or feeding frames that are already 640x640.
+  So ~28 fps of model throughput, but only ~5-9 fps end-to-end if every frame is a
+  fresh JPEG - decode and resize cost more than the inference does. `bench/2`
+  reports both as `fps` and `pipeline_fps`. For a camera pipeline, feed frames that
+  are already 640x640 and reuse one prepared buffer.
+
+  Two once-only costs, both discarded by `bench/2`: the first `prepare/2` in a
+  process pays 0.5-1.5 s of XLA kernel compilation, and the first inference on a
+  session pays HTP graph compilation.
 
   ## Which models work
 
@@ -73,6 +79,8 @@ defmodule Example.Yolo do
   `[1, 56, A]`) will not decode correctly through it. Use `run/2` for the raw
   output tensor of any model, and see `Example.NPU` for the NPU-level checks.
   """
+
+  import Nx.Defn
 
   @default_model "/root/det/model.onnx"
 
@@ -109,15 +117,50 @@ defmodule Example.Yolo do
   end
 
   @doc """
+  Decode, resize and letterbox an image once, ready to be run repeatedly.
+
+  This is the expensive half of a single-image pipeline - JPEG decode and resize
+  are C, but they still cost more than the inference does - so for benchmarking
+  or for running several models over the same frame, do it once:
+
+      {:ok, s} = Example.Yolo.load()
+      {:ok, frame} = Example.Yolo.prepare("/root/bus.jpg")
+      Example.Yolo.detect(frame, session: s)
+
+  Returns `{:ok, prepared}`, which `detect/2` and `run/2` accept in place of a
+  path. `:input_size` must match the session it will be fed to (both default to
+  640).
+  """
+  def prepare(path, opts \\ []) do
+    side = Keyword.get(opts, :input_size, 640)
+
+    with {:ok, image} <- read_image(path) do
+      {us, {input, geom}} = :timer.tc(fn -> preprocess(image, side) end)
+
+      {:ok,
+       %{
+         input: input,
+         geom: geom,
+         side: side,
+         source: path,
+         preprocess_us: us,
+         image_size: (fn {h, w, _} -> {w, h} end).(image.shape)
+       }}
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  @doc """
   Detect objects in the image at `path`.
 
   Returns `{:ok, result}` or `{:error, reason}`. See the moduledoc for options.
   Pass `session: handle` from `load/1` to avoid re-compiling the model.
   """
-  def detect(path, opts \\ []) do
-    with {:ok, image} <- read_image(path),
-         {:ok, %{ortex: session, side: side, model: model_path}} <- reuse_or_load(opts) do
-      {pre_us, {input, geom}} = :timer.tc(fn -> preprocess(image, side) end)
+  def detect(source, opts \\ []) do
+    with {:ok, %{ortex: session, side: side, model: model_path}} <- reuse_or_load(opts),
+         {:ok, frame} <- as_prepared(source, side, opts) do
+      %{input: input, geom: geom, preprocess_us: pre_us} = frame
       {inf_us, out} = :timer.tc(fn -> Ortex.run(session, {input}) end)
 
       {out} = out
@@ -142,7 +185,7 @@ defmodule Example.Yolo do
          ep: Keyword.get(opts, :ep, :qnn),
          input_shape: Nx.shape(input),
          output_shape: Nx.shape(raw),
-         image_size: (fn {h, w, _} -> {w, h} end).(image.shape)
+         image_size: frame.image_size
        }}
     end
   rescue
@@ -155,19 +198,28 @@ defmodule Example.Yolo do
   For models whose head `detect/2` does not understand (pose, segment), or when
   you want to do your own post-processing.
   """
-  def run(path, opts \\ []) do
-    with {:ok, image} <- read_image(path),
-         {:ok, %{ortex: session, side: side}} <- reuse_or_load(opts) do
-      {input, geom} = preprocess(image, side)
-      {us, {out}} = :timer.tc(fn -> Ortex.run(session, {input}) end)
-      {:ok, Nx.backend_transfer(out), %{inference_us: us, letterbox: geom}}
+  def run(source, opts \\ []) do
+    with {:ok, %{ortex: session, side: side}} <- reuse_or_load(opts),
+         {:ok, frame} <- as_prepared(source, side, opts) do
+      {us, {out}} = :timer.tc(fn -> Ortex.run(session, {frame.input}) end)
+      {:ok, Nx.backend_transfer(out), %{inference_us: us, letterbox: frame.geom}}
     end
   rescue
     e -> {:error, Exception.message(e)}
   end
 
   @doc """
-  Time `n` inferences with one session, reporting per-iteration cost and fps.
+  Measure inference throughput: decode and letterbox the image once, then run the
+  model `n` times and report per-iteration cost and fps.
+
+      iex> Example.Yolo.bench("/root/bus.jpg", iterations: 30)
+      %{ep: :qnn, iterations: 30, mean_us: 36_615, fps: 27.3, pipeline_fps: 9.1, ...}
+
+  Only `Ortex.run/2` is inside the timed loop - no decode, no resize, no
+  letterbox, no NMS - so `fps` is the model's throughput on the chosen execution
+  provider, not the pipeline's. `preprocess_us` reports what a frame costs to get
+  ready, once, for comparison; `pipeline_fps` is the honest end-to-end figure if
+  every frame is a fresh JPEG.
 
   Measures only the execution provider you ask for. It deliberately does *not*
   run a CPU arm for comparison, because a trustworthy CPU baseline is not
@@ -185,40 +237,38 @@ defmodule Example.Yolo do
 
   So: for a CPU baseline, reboot and make `ep: :cpu_forced` the first inference
   the node performs, or use the standalone `qnn-probe` binary with
-  `ADSP_LIBRARY_PATH=/nonexistent`. Measured that way, yolo11s at 640x640 is
-  ~865 ms/iter on the ARM cores against ~43 ms/iter here, i.e. about 20x.
+  `ADSP_LIBRARY_PATH=/nonexistent`.
   """
   def bench(path, opts \\ []) do
-    n = Keyword.get(opts, :iterations, 10)
+    n = Keyword.get(opts, :iterations, 30)
 
     with {:ok, handle} <- load(opts),
-         opts = Keyword.put(opts, :session, handle),
+         {:ok, frame} <- prepare(path, Keyword.put(opts, :input_size, handle.side)),
          # Discarded: the first run carries HTP graph compilation.
-         {:ok, _} <- detect(path, opts) do
+         {_us, _} <- {0, Ortex.run(handle.ortex, {frame.input})} do
       timings =
         for _ <- 1..n do
-          case detect(path, opts) do
-            {:ok, %{inference_us: us}} -> us
-            _ -> nil
-          end
+          {us, _} = :timer.tc(fn -> Ortex.run(handle.ortex, {frame.input}) end)
+          us
         end
 
-      case Enum.reject(timings, &is_nil/1) do
-        [] ->
-          {:error, :all_runs_failed}
+      sorted = Enum.sort(timings)
+      mean = div(Enum.sum(timings), length(timings))
 
-        list ->
-          mean = div(Enum.sum(list), length(list))
-
-          %{
-            ep: Keyword.get(opts, :ep, :qnn),
-            iterations: length(list),
-            mean_us: mean,
-            min_us: Enum.min(list),
-            max_us: Enum.max(list),
-            fps: Float.round(1_000_000 / mean, 1)
-          }
-      end
+      %{
+        ep: Keyword.get(opts, :ep, :qnn),
+        model: handle.model,
+        image: {path, frame.image_size},
+        iterations: n,
+        mean_us: mean,
+        p50_us: Enum.at(sorted, div(n, 2)),
+        min_us: List.first(sorted),
+        max_us: List.last(sorted),
+        fps: Float.round(1_000_000 / mean, 1),
+        preprocess_us: frame.preprocess_us,
+        pipeline_fps: Float.round(1_000_000 / (mean + frame.preprocess_us), 1),
+        backend: Nx.default_backend()
+      }
     end
   end
 
@@ -230,6 +280,20 @@ defmodule Example.Yolo do
         Application.get_env(:example, :yolo_model, @default_model)
 
     if File.exists?(path), do: {:ok, path}, else: {:error, {:model_not_found, path}}
+  end
+
+  # A path is decoded here; an already-prepared frame passes straight through, so
+  # a benchmark loop pays for the decode and resize exactly once.
+  defp as_prepared(%{input: _, geom: _} = frame, side, _opts) do
+    if frame.side == side do
+      {:ok, frame}
+    else
+      {:error, {:input_size_mismatch, prepared: frame.side, session: side}}
+    end
+  end
+
+  defp as_prepared(path, side, opts) when is_binary(path) do
+    prepare(path, Keyword.put(opts, :input_size, side))
   end
 
   defp reuse_or_load(opts) do
@@ -337,13 +401,11 @@ defmodule Example.Yolo do
   # matching what Ultralytics does at training time. Returns the NCHW f32 tensor
   # scaled to 0..1 plus the geometry needed to map boxes back.
   #
-  # This is deliberately done on binaries rather than with Nx.pad/divide/
-  # transpose. There is no EXLA on this target, and BinaryBackend evaluates
-  # transpose element-by-element with full index arithmetic: the Nx version of
-  # this function took **9.0 s** for one 640x640 image, i.e. 370x the inference
-  # it was feeding. Interleaved-RGB to planar-f32 is one linear pass per channel
-  # here, and the letterbox padding is emitted directly as f32 rather than built
-  # as a u8 image first.
+  # Two implementations, picked by which Nx backend is actually installed.
+  # BinaryBackend evaluates transpose element-by-element with full index
+  # arithmetic, so the Nx pipeline below costs 9.0 s per frame on it - 200x the
+  # inference it feeds. The binary fallback exists for that case; with EXLA the
+  # Nx version is both faster and clearer.
   defp preprocess(%StbImage{} = image, side) do
     {h0, w0, _} = image.shape
 
@@ -355,7 +417,75 @@ defmodule Example.Yolo do
     pad_y = div(side - nh, 2)
 
     resized = StbImage.resize(image, nh, nw)
+    geom = %{scale: scale, pad_x: pad_x, pad_y: pad_y, w0: w0, h0: h0}
 
+    input =
+      if accelerated_nx?() do
+        to_input_nx(resized, side, nh, nw, pad_x, pad_y)
+      else
+        to_input_binary(resized, side, nh, nw, pad_x, pad_y)
+      end
+
+    {input, geom}
+  end
+
+  defp accelerated_nx?, do: Nx.default_backend() != {Nx.BinaryBackend, []}
+
+  defp to_input_nx(resized, side, nh, nw, pad_x, pad_y) do
+    resized.data
+    |> Nx.from_binary(:u8)
+    |> Nx.reshape({nh, nw, 3})
+    |> letterbox(
+      pad_top: pad_y,
+      pad_bottom: side - nh - pad_y,
+      pad_left: pad_x,
+      pad_right: side - nw - pad_x
+    )
+    # Copy - not transfer - the result out of the accelerator and into a plain
+    # binary. ortex pulls its inputs across with Nx.backend_transfer, which
+    # *deletes* the source buffer, so a prepared frame held in an XLA buffer
+    # works exactly once and then raises "ToLiteral() called on deleted or
+    # donated buffer" on reuse. Copying also removes a per-inference device
+    # round-trip: with an EXLA-resident input, Ortex.run measured 77 ms against
+    # 43 ms for a binary one.
+    |> Nx.backend_copy(Nx.BinaryBackend)
+  end
+
+  # Pad, planarize and scale as ONE compiled kernel.
+  #
+  # It matters that this is a `defn` and not plain Nx calls: EXLA.Backend
+  # executes each operation as its own XLA computation with a host round-trip.
+  # Measured, median of 7, whole `preprocess` including the 15 ms StbImage
+  # resize: 70 ms for the pure-binary fallback, 65 ms with op-by-op EXLA, 52 ms
+  # fused here. What remains is dominated by moving the frame across the host
+  # boundary (~1 MB u8 in, 4.9 MB f32 out), not by the arithmetic.
+  #
+  # The padding sizes are `defn` options, so XLA compiles one kernel per distinct
+  # image aspect ratio and reuses it; a camera feed at a fixed resolution
+  # compiles once. That first call costs 0.5-1.5 s.
+  #
+  # This path and the binary fallback agree to 1 ULP (max abs diff 5.96e-8): the
+  # fallback divides in double precision and narrows to f32, XLA divides in f32.
+  # Detections are identical.
+  defnp letterbox(image, opts \\ []) do
+    opts = keyword!(opts, [:pad_top, :pad_bottom, :pad_left, :pad_right])
+
+    image
+    |> Nx.pad(@pad_value, [
+      {opts[:pad_top], opts[:pad_bottom], 0},
+      {opts[:pad_left], opts[:pad_right], 0},
+      {0, 0, 0}
+    ])
+    |> Nx.transpose(axes: [2, 0, 1])
+    |> Nx.divide(255.0)
+    |> Nx.as_type(:f32)
+    |> Nx.new_axis(0)
+  end
+
+  # One linear pass per channel over the interleaved RGB bytes, emitting the
+  # letterbox padding directly as f32 rather than building a padded u8 image
+  # first. Used only when Nx has no accelerated backend.
+  defp to_input_binary(resized, side, nh, nw, pad_x, pad_y) do
     pad = <<@pad_value / 255 :: float-32-native>>
     left = :binary.copy(pad, pad_x)
     right = :binary.copy(pad, side - nw - pad_x)
@@ -363,20 +493,14 @@ defmodule Example.Yolo do
     bottom = :binary.copy(pad, (side - nh - pad_y) * side)
     row_bytes = nw * 4
 
-    planes =
-      for channel <- 0..2 do
-        plane = channel_to_f32(resized.data, channel)
-        rows = for y <- 0..(nh - 1), do: [left, :binary.part(plane, y * row_bytes, row_bytes), right]
-        [top, rows, bottom]
-      end
-
-    input =
-      planes
-      |> IO.iodata_to_binary()
-      |> Nx.from_binary(:f32)
-      |> Nx.reshape({1, 3, side, side})
-
-    {input, %{scale: scale, pad_x: pad_x, pad_y: pad_y, w0: w0, h0: h0}}
+    for channel <- 0..2 do
+      plane = channel_to_f32(resized.data, channel)
+      rows = for y <- 0..(nh - 1), do: [left, :binary.part(plane, y * row_bytes, row_bytes), right]
+      [top, rows, bottom]
+    end
+    |> IO.iodata_to_binary()
+    |> Nx.from_binary(:f32)
+    |> Nx.reshape({1, 3, side, side})
   end
 
   # Pull one channel out of an interleaved RGB u8 binary and scale it to f32

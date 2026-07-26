@@ -519,6 +519,54 @@ image means vendoring ~107 MB into `blobs/onnxruntime-qnn/usr/lib/onnxruntime-qn
 `/usr/lib/libQnnHtp.so`, plus a system rebuild. Not done yet - the licensing question below applies
 to these files too.
 
+### EXLA on the board: it works, and what it is actually worth
+
+`xla_extension-0.10.0-**aarch64-linux-gnu**-cpu` is published, so no source build of XLA is needed.
+Verified before committing to it: max symbol requirement `GLIBC_2.27`; needs only
+libc/libm/libpthread/librt/libdl/libstdc++/libgcc_s, and `libstdc++.so.6.0.34` + `libgcc_s.so.1` are
+already in `/lib`. `libxla_extension.so` is **392 MB** on disk, ~56 MB compressed — firmware went
+165 MB -> 240 MB.
+
+Cross-compiling it needs one knob, set in `example/mix.exs` because Mix evaluates that file before
+compiling any dependency: `XLA_TARGET_PLATFORM=aarch64-linux-gnu`. The `xla` package then fetches the
+aarch64 archive instead of a host one. EXLA's own `libexla.so` cross-compiles without any patching —
+its Makefile already has an `ifeq ($(CROSSCOMPILE),)` branch and builds through `$(CXX)`, so Nerves'
+toolchain is picked up. `RPATH=$ORIGIN/xla_extension/lib` resolves inside the release. On device:
+`Nx.default_backend() == {EXLA.Backend, []}`, first op 2000 ms (client init), second 4 ms.
+
+**Three traps, all measured:**
+
+1. **`EXLA.Backend` alone buys ~10%.** It executes each Nx op as its own XLA computation with a host
+   round-trip. Whole `preprocess` (median of 7, includes the 15 ms `StbImage.resize`): **70 ms**
+   pure-binary fallback, **65 ms** op-by-op EXLA, **52 ms** fused in a `defn`. Getting the win
+   requires `config :nx, default_defn_options: [compiler: EXLA]` *and* wrapping the pipeline in a
+   `defn` — without the config, `defn` runs through Nx's interpreter and is slower still.
+2. **A prepared frame must not stay in an XLA buffer.** ortex pulls its inputs across with
+   `Nx.backend_transfer`, which *deletes* the source. So an EXLA-resident input works exactly once
+   and the second inference raises `ToLiteral() called on deleted or donated buffer`. `to_input_nx`
+   ends with `Nx.backend_copy(Nx.BinaryBackend)`. That also removed a per-inference device
+   round-trip: 77 ms -> 32 ms per `Ortex.run`.
+3. **The remaining cost is data movement, not arithmetic.** ~1 MB u8 in and 4.9 MB f32 out per frame.
+   Decode (80 ms) and resize (15 ms) are already C and untouchable by XLA.
+
+Verified equivalent to the binary fallback: identical detections, and inputs agreeing to 1 ULP
+(max abs diff 5.96e-8 — the fallback divides in double and narrows to f32, XLA divides in f32).
+
+**Verdict.** Worth keeping for what it enables (`defn`, Axon, custom numerics on device), not for this
+pipeline: 392 MB to take preprocessing from 70 ms to 52 ms, while decode+resize+inference are 127 ms.
+A small C/Rust NIF doing resize+planar in one pass would beat it for ~50 KB. Model throughput is
+**27-31 fps** either way; end-to-end from a fresh JPEG is ~5-9 fps.
+
+### Build trap: plain `mix compile` cross-compiles rustler NIFs, `mix deps.compile --force` does not
+
+`config :ortex, Ortex.Native, target: "aarch64-unknown-linux-gnu"` is honoured by
+`mix deps.compile ortex --force` but **not** by a plain `mix compile` that happens to recompile
+ortex's `.ex` files — that path silently produced an **x86-64** NIF, which only surfaced two steps
+later as `scrub-otp-release.sh: ERROR: Unexpected executable format`. Fixed by pinning the target in
+cargo's own environment in `shell.nix` (`CARGO_BUILD_TARGET` plus the per-target linker/CC/AR and the
+host-side `CC_x86_64_*` overrides), so both Mix paths agree regardless of config visibility.
+Regression-tested by touching `lib/ortex.ex` and running plain `mix compile`.
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):
