@@ -4,8 +4,9 @@ import Config
 # dependency is compiled).
 Application.start(:nerves_bootstrap)
 
-# Shoehorn starts the app after nerves_runtime.
-config :shoehorn, init: [:nerves_runtime]
+# Shoehorn starts the app after nerves_runtime and nerves_pack, so networking
+# and sshd are up before Example.Application runs.
+config :shoehorn, init: [:nerves_runtime, :nerves_pack]
 
 config :logger, backends: [RingLogger]
 

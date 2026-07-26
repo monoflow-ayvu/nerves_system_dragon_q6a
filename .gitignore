@@ -4,6 +4,8 @@ deps/
 .nix-hex/
 *.fw
 *.img
+# `mix nerves.artifact` drops the packaged system tarball in the repo root.
+nerves_system_dragon_q6a-portable-*.tar.gz
 build*.log
 erl_crash.dump
 test/work/

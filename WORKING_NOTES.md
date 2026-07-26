@@ -169,6 +169,30 @@ the retry logic itself.
 
 ## Decisions and gotchas worth not re-deriving
 
+- **NEVER `docker run … make` against the build volume as root.** The builder image runs as root
+  even when you pass `--env UID=1000 --env GID=100`, so ad-hoc container commands leave
+  root-owned `build/`, `host/` and `images/` while Nerves' own build runs as `1000:100`. The result
+  is *non-deterministic* write failures scattered across the kernel tree, with no compiler error:
+  ```
+  fixdep: error opening file: kernel/time/.posix-timers.o.d: No such file or directory
+  ar: kernel/time/posix-timers.o: No such file or directory   → Error 123
+  ```
+  Six unrelated subsystems failed this way (`fs/nfs`, `kernel/bpf`, `net/ipv4`, `atl1c`,
+  `brcmfmac`, `iwlwifi`) on a *freshly dircleaned* tree, which is the tell: stale state cannot
+  explain a clean tree failing. Disk (754G free) and memory (30Gi) were both fine.
+  Repair: `docker run --rm -v <volume>:/v alpine chown -R 1000:100 /v`, then dirclean the affected
+  packages and rebuild through `mix`. Prefer `mix` for everything; if you must drive Buildroot
+  directly, chown afterwards.
+- **Only ever run ONE build at a time.** All builds share the single Docker volume and Buildroot
+  has no locking. Two concurrent `mix compile`/`mix firmware` runs corrupt each other — earlier in
+  the same session this killed the artifact `tar` step with
+  `file changed as we read it` / `File removed before we read it`.
+- **`mix compile` skips Buildroot entirely when no `package_files()` input changed** — exit 0, zero
+  work done. If you fix something *inside* the volume, mix will not notice. Changing a
+  `package_files()` file (e.g. `linux-dragon-q6a.fragment`) is what forces a real rebuild *and* a
+  fresh artifact; that is the reliable way to propagate a fix, not `mix nerves.artifact` (which did
+  not refresh the extracted artifact cache at
+  `~/.local/share/nerves/artifacts/<system>-portable-<vsn>/`).
 - **Changing `BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION` does NOT rebuild from the new tree.**
   Buildroot keys off `build/linux-custom/.stamp_downloaded` + `.stamp_extracted`; if they exist it
   never fetches the new tarball, silently rebuilds the OLD sources against the new fragment, and
@@ -198,6 +222,22 @@ the retry logic itself.
   prompt, `drivers/gpu/drm/bridge/Kconfig:15-16`); it only follows its selector
   (`select DRM_AUX_BRIDGE if DRM_BRIDGE` in `PHY_QCOM_QMP_COMBO`). Verify it in the merged
   `.config`, never assert it in the fragment.
+- **`qemu-smoke.sh <a-prebuilt.fw>` fails its IEx check if that .fw was built with
+  `NERVES_CONSOLE=tty1`.** The script only exports `NERVES_CONSOLE=ttyAMA0` when it builds the
+  firmware itself (`qemu-smoke.sh:87-99`); a passed-in `.fw` is used as-is. A tty1 build puts IEx
+  on the framebuffer console, which QEMU's serial harness cannot see, so you get
+  `[FAIL] IEx console` on a perfectly good image. The tell is in the serial log:
+  `erlinit: The shell will be launched on tty 'tty1'.` The first three checks (GRUB slot, kernel
+  banner, userspace/erlinit) still validate the boot chain. For a clean 5/5 run the script's own
+  build, or `NERVES_CONSOLE=ttyAMA0`.
+- **Buildroot leaves stale module trees in `target/` across a kernel-version change.** After the B7
+  switch, `target/lib/modules/` held BOTH `6.18.0` (73.9M, Deka) and `6.18.2` (72.8M, radxa), so
+  the shipped rootfs carried ~74 MB of dead modules — 1370 stale `.ko` next to 1367 live ones.
+  `make linux-dirclean` clears the *build* dir but Buildroot never removes previously *installed*
+  files, and it has no incremental fix; only `make clean` + a full rebuild (~2h) guarantees it.
+  Functionally inert (`modprobe` resolves against `uname -r`), so it does not affect the Phase 0
+  measurement — but do a clean rebuild before any release, and treat it as a warning that anything
+  else dropped from the config may also still be sitting in `target/`.
 - **`Logger` output never reaches the serial console — never gate a test on a `Logger` line.**
   Nerves routes Logger into an in-memory ring buffer (`config :logger, backends: [RingLogger]`,
   `example/config/target.exs:9`, `config.exs:10`); you read it with `RingLogger.next()` in IEx.
@@ -225,7 +265,20 @@ the retry logic itself.
   log; expect `Radxa Dragon Q6A`-ish, and a populated `/sys/firmware/devicetree/base/`).
 - **The "UEFI signature problem" was never a signature problem.** It was EDK2 `TrEE`/`MeasureBoot`
   failing to hash a 47 MB UKI PE image. Nothing in the proven system is signed.
-- **Unresolved top risk (task #1, needs the board):** GRUB's arm64 loader boots the kernel via
+- **RESOLVED 2026-07-25 on hardware — B6 is outcome 1, GRUB is fine.** The board boots our image
+  from microSD: GRUB → kernel → erlinit, with erlinit's message visible on HDMI. Firmware
+  `LoadImage()` accepts our ~39 MiB `EFI_STUB` kernel; no MeasureBoot abort. **Do not apply
+  `CONFIG_EFI_ZBOOT`. Do not port systemd-boot.** The Yocto UKI failure was about PE layout, not
+  payload size. See `BRINGUP.md` §3b. The stale risk analysis below is kept only for context.
+- **`mix firmware.image` + `dd` produces a card EDK2 will not even offer as a boot device.** Use
+  `mix firmware.burn` (fwup straight to `/dev/sdX`). The `.img` is a fixed 4.75 GiB image whose GPT
+  hard-codes that geometry, so on a larger card the backup GPT is not at the last LBA and
+  `last_usable_lba` is wrong — `fdisk` warns "The backup GPT table is not on the end of the device"
+  and "GPT PMBR size mismatch". Linux tolerates it; EDK2 evidently does not, and the symptom is no
+  boot entry at all (not a GRUB error, not a rescue prompt — nothing). The image is otherwise
+  structurally perfect, so this is a *geometry* bug, not a content bug. Salvage: `sgdisk -e`.
+  Also note `expand = true` (`fwup.conf:169`) is inert when the target is a file.
+- **Superseded top risk (kept for context):** GRUB's arm64 loader boots the kernel via
   firmware `LoadImage()` (`grub-core/loader/efi/linux.c:211`, no non-x86 fallback), so our ~39 MiB
   `CONFIG_EFI_STUB` kernel takes the same path that killed their UKI. systemd-boot avoids it by
   hand-loading PE sections when Secure Boot is off. QEMU cannot test this — its EDK2 reports

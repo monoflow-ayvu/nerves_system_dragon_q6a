@@ -3,4 +3,8 @@
 /.nerves/
 /.elixir_ls/
 *.fw
+*.img
 erl_crash.dump
+
+# WiFi credentials. The .example template IS tracked; the real file never is.
+/config/secrets.exs

@@ -18,6 +18,12 @@ let
     gnumake
     gcc
 
+    # nerves_uevent's NIF #includes <libmnl/libmnl.h>. The target gets this
+    # from BR2_PACKAGE_LIBMNL (already enabled), but a HOST build — which is
+    # what `mix` does when MIX_TARGET is unset — needs it here or it dies with
+    # "fatal error: libmnl/libmnl.h: No such file or directory".
+    libmnl
+
     # image tooling: install-to-disk.sh (sgdisk), ESP inspection (mtools)
     gptfdisk
     mtools
@@ -45,6 +51,13 @@ let
     # Install nerves_bootstrap only if it's not already present, so repeated
     # shell/direnv loads stay fast.
     mix archive | grep -q nerves_bootstrap || mix archive.install hex nerves_bootstrap --force 1>&2
+
+    # Default to the board target, like ../nerves_system_sg2002/shell.nix does.
+    # Without this, `cd example && mix firmware` inherits MIX_TARGET=host and
+    # tries to build target-only NIFs (nerves_uevent) for the host. The system
+    # project itself is unaffected: its mix.exs calls set_target() which forces
+    # MIX_TARGET=target regardless of this value.
+    export MIX_TARGET=dragon_q6a
   '';
 
 in mkShell {

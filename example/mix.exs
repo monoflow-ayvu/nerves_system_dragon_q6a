@@ -33,6 +33,14 @@ defmodule Example.MixProject do
       {:ring_logger, "~> 0.11"},
       {:toolshed, "~> 0.4"},
 
+      # Networking + remote access. nerves_pack pulls in vintage_net,
+      # vintage_net_ethernet, vintage_net_wifi, nerves_ssh, mdns_lite and
+      # nerves_time, which is the whole "get on the network and let me in" set.
+      # SSH is what makes OTA (`mix upload`) and remote debugging possible, so
+      # this is a prerequisite for bench work beyond the HDMI console.
+      {:nerves_pack, "~> 0.7"},
+      {:nerves_motd, "~> 0.1"},
+
       # Allow Nerves.Runtime on host for dev/test.
       {:nerves_runtime, "~> 0.13"},
 

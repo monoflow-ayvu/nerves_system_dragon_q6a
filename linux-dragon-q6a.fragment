@@ -166,6 +166,19 @@ CONFIG_PHY_QCOM_QMP_PCIE=y
 # --- Ethernet: Realtek RTL8111 on pcie0 (arch defconfig has =m) ---
 CONFIG_R8169=y
 
+# --- Policy routing: REQUIRED by VintageNet -------------------------------
+# VintageNet gives each interface its own routing table and uses `ip rule` to
+# pick between them, which is how it prioritises wired over wireless. Without
+# these, `ip` fails with "RTNETLINK answers: Operation not supported" and
+# VintageNet.RouteManager crash-loops -- even though the interface associated
+# and DHCP succeeded. Observed on hardware 2026-07-25: wlan0 got 192.168.1.33
+# and then RouteManager terminated on every route insert. VintageNet prints
+# these two symbols by name in that error.
+# IP_MULTIPLE_TABLES depends on IP_ADVANCED_ROUTER, so both are needed; the
+# base arm64 defconfig has `# CONFIG_IP_ADVANCED_ROUTER is not set`.
+CONFIG_IP_ADVANCED_ROUTER=y
+CONFIG_IP_MULTIPLE_TABLES=y
+
 # --- NVMe on the M.2 M-key slot ---
 CONFIG_BLK_DEV_NVME=y
 

@@ -94,6 +94,78 @@ Expect: GRUB "Booting slot A" → kernel 6.18 → IEx on `ttyMSM0`.
   implemented).
 - If the kernel hangs early: add `earlycon` to the cmdline in `grub.cfg`.
 
+## 3b. B6 RESOLVED on hardware — GRUB's LoadImage path works
+
+**Observed 2026-07-25: outcome 1 of the three B6 possibilities.** The board boots our image from
+microSD: GRUB ran, the kernel loaded, erlinit came up, and its console message appeared **on the
+HDMI screen**. No `cannot load image`, no silent ~30 s watchdog reset.
+
+Consequences, all of which retire planned work:
+
+- Firmware `LoadImage()` accepts our ~39 MiB `CONFIG_EFI_STUB` kernel. The EDK2
+  `TrEE`/`MeasureBoot` abort that killed the Yocto project's 50 MiB UKI does **not** affect a plain
+  arm64 `Image` loaded by GRUB. So the size theory was wrong and the PE-layout theory was right.
+- **`CONFIG_EFI_ZBOOT` is not needed.** Do not apply it.
+- **The systemd-boot port is not needed.** Keep GRUB.
+- The HDMI framebuffer console works, so `console=tty1` + `CONFIG_SYSFB_SIMPLEFB=y` + `simpledrm`
+  were correct — and since fbcon requires a real framebuffer, the EDK2 DTB does supply the
+  `simple-framebuffer` node (q3). Confirm explicitly with the commands in §3c.
+
+**Flash with `mix firmware.burn`, never by `dd`-ing `mix firmware.image` output.** A dd'd
+`example.img` was **not offered as a boot device at all** — no GRUB, no rescue prompt. The image
+itself was structurally valid (GPT, ESP `EF00`/`C12A7328-…`, FAT32, `/EFI/BOOT/BOOTAA64.EFI`,
+grub prefix `/EFI/BOOT`), but it is a fixed 4.75 GiB image whose GPT hard-codes that geometry, so
+on a larger card the backup GPT is no longer at the last LBA and `last_usable_lba` is wrong
+(`fdisk` warns "The backup GPT table is not on the end of the device" / "GPT PMBR size mismatch").
+EDK2 appears to reject that table outright. `fwup` writing straight to the device sizes the GPT to
+the real medium and expands p4 (`fwup.conf:169`). To salvage an already-dd'd card:
+`sudo sgdisk -e /dev/sdX`.
+
+## 3b-2. WiFi + SSH working on hardware — 2026-07-26
+
+`ssh nerves.local` over WiFi, confirmed on the board:
+
+```
+example 0.1.0 - emotion-van
+  Serial       : 0048542164f6      Uptime  : 1 minutes and 51 seconds
+  Firmware     : Valid (A)         Applications : 38 started
+  Load average : 0.70 0.38 0.15    Temperature  : 32.8°C
+  Hostname     : nerves-64f6       Platform     : dragon_q6a aarch64
+  wlan0        : 192.168.1.33/24, 2804:…:352e/64, fe80::…:352e/64
+```
+
+What that one banner proves, beyond networking: **`Firmware: Valid (A)`** means StartupGuard ran on
+real hardware and validated the slot after the app came up — B5's mechanism works end to end, not
+just in QEMU. **`Temperature: 32.8°C`** means `QCOM_TSENS` is live. IPv6 SLAAC works alongside
+IPv4. mDNS resolves, so `mix upload` OTA is now available and SD reflashing is no longer needed
+for app changes.
+
+Two fixes were needed to get here, both easy to lose:
+
+1. **The AIC8800 driver must be rebuilt whenever the kernel version changes.** Buildroot does not
+   rebuild out-of-tree kernel-module packages on a kernel bump — after the B7 switch the `.ko`
+   files still sat under `/lib/modules/6.18.0/updates/` while the board ran 6.18.2, so
+   `modprobe` found nothing. Symptoms were total silence: no `wlan0`, no `lsmod` entry, and not one
+   `aic` line in `dmesg`. Fix: `make aic8800-dirclean` and rebuild.
+2. **VintageNet needs policy routing** — `CONFIG_IP_ADVANCED_ROUTER=y` +
+   `CONFIG_IP_MULTIPLE_TABLES=y`, now in `linux-dragon-q6a.fragment`. Without them the interface
+   associates and DHCP succeeds, then `VintageNet.RouteManager` crash-loops on every route insert
+   with `ip: RTNETLINK answers: Operation not supported`. VintageNet prints both symbol names in
+   that error, so trust it.
+
+## 3c. Phase 0 data to capture now that it boots
+
+```sh
+cat /sys/class/dmi/id/bios_version            # q4/M8 floor: 6.0.260120.BOOT.MXF.1.0.1-00549-KODIAKWP-1
+ls /sys/firmware/devicetree/base/             # q3: must be populated -> firmware DTB in use (B1)
+grep -c simple-framebuffer /sys/firmware/fdt  # or: dtc -I fs /sys/firmware/devicetree/base | grep -A5 simple-framebuffer
+dmesg | grep -iE "simpledrm|efifb|Machine model"
+dmesg | grep -iE "adreno|msm|-110|-19"        # B2: display/GPU probe
+cat /sys/class/remoteproc/*/state             # M7: expect "running"
+ls -l /dev/tee0 /dev/fastrpc-*                # M11 / fastrpc
+```
+IEx is the only shell, so run these via `:os.cmd/1` or `System.cmd/2`.
+
 ## 4. Acceptance test (§9 of the task doc)
 
 On a freshly flashed image, over serial, no manual setup:
