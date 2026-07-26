@@ -31,7 +31,18 @@ is recovered via **EDL**, not reflashing SD.
   (firmware/EDL sections). Armbian notes the **latest UEFI firmware is
   required**.
 - **Observed UEFI version string** (`QC_IMAGE_VERSION_STRING=BOOT...KODIAK...`
-  from the boot log): __________ → record in `GOAL.md`.
+  from the boot log, or `cat /sys/class/dmi/id/bios_version` once booted):
+  __________ → record in `GOAL.md`.
+- **Minimum required (the M8 floor):**
+  `6.0.260120.BOOT.MXF.1.0.1-00549-KODIAKWP-1`
+
+  Older boot firmware makes QTEE reject **unsigned** DSP protection domains
+  with `0x80000600`. QNN and `fastrpc_test -a v68` both need unsigned PD, so on
+  an un-upgraded board the NPU is dead however correct everything else is — and
+  it presents as a blob/version mismatch, sending you down the wrong path.
+  **`0x80000600` has two causes: old SPI firmware, or a blob/shell mismatch.
+  Check the firmware version first.** Upgrade before spending any time on
+  §2 below.
 
 ## 2. Phase-0 NPU sanity check (blobs already vendored)
 
