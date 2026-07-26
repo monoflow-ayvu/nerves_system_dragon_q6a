@@ -176,14 +176,41 @@ Fix: `CONFIG_DRM_MSM=m`, keeping gpucc/dispcc/DRM builtin. Confirmed working:
 with no return of -110/-19. Side benefit: the shell comes up sooner, because msm no longer delays
 the root mount.
 
+**Display CONFIRMED WORKING at 1080p through msm's own modesetting:**
+```
+/sys/class/drm/card1-HDMI-A-1/status  -> connected
+/sys/class/drm/card1-HDMI-A-1/modes   -> 1920x1080 (x3), 1024x768, 800x600, 640x480   (EDID read)
+/sys/class/graphics/fb0/virtual_size  -> 1920,1080
+/sys/class/graphics/fb0/name          -> msmdrmfb          (msm, NOT simpledrm)
+```
+
+**Known-cosmetic warnings — do NOT chase these:**
+- `disp_cc_mdss_dp_pixel_clk_src: rcg didn't update its configuration.` +
+  `WARNING at drivers/clk/qcom/clk-rcg2.c:136 update_config`, via
+  `qmp_combo_configure_dp_clocks` → `msm_dp_ctrl_enable_mainlink_clocks`. The DP pixel-clock RCG
+  fails to latch on the first attempt during PHY power-on, then succeeds: the console switches to
+  a 240x67 (=1920x1072) framebuffer ~340 ms later and the mode list is correct. Same family as the
+  upstream "delay applying clock defaults until PHY is fully enabled" work. Noise unless the mode
+  list or fb size regresses.
+- `[drm] Cannot find any crtc or sizes` (x2) is logged *before* HPD processing completes, i.e. a
+  bring-up transient, not the end state. It is NOT evidence of a broken pipeline — check
+  `fb0/name` and `modes` before believing it.
+- `WARNING at kernel/module/kmod.c:143 __request_module`, via
+  `phy_request_driver_module` ← `rtl_init_one`. r8169 is builtin and probes in async context, so
+  `request_module()` for the MDIO PHY warns. `CONFIG_REALTEK_PHY=y` is already builtin so the PHY
+  binds anyway and eth0 works. This is what sets the sticky `Tainted: W` flag that then appears on
+  every later trace -- do not attribute `W` on an unrelated stack to that stack.
+- `aicwf_usb_disconnect` / `aicwf_bus_deinit` around WiFi init is the AIC8800's normal two-stage
+  bring-up: `aic_load_fw` pushes firmware, the device re-enumerates, then `aic8800_fdrv` binds.
+- `fb0: sys_imageblit/sys_fillrect: framebuffer is not in virtual address space` — fbdev emulation
+  draws via a shadow buffer. Harmless, but it makes console scrolling slow, which is worth
+  remembering before blaming boot time on something else while `loglevel=7` is set.
+
 **Still open, in priority order:**
-1. `[drm] Cannot find any crtc or sizes` (x2) — msm's DPU finds no usable mode/connector. HDMI
-   currently works only via the EDK2-initialised framebuffer (simpledrm → msmdrmfb), not via msm's
-   own modesetting. Suspect the DP→HDMI bridge is not described/driven. Check
-   `/sys/class/drm/*/status` and whether an EDID is read.
-2. `qcom-venus aa00000.video-codec: probe … failed with error -110` — this is **M3** (wrong Venus
-   blob), a different root cause from the GPU firmware issue. Do not conflate them.
-3. `gcc-sc7280`/`gpu_cc-sc7280: sync_state() pending due to 3d6a000.gmu` — likely benign: the gmu
+1. `qcom-venus aa00000.video-codec: probe … failed with error -110` — this is **M3** (wrong Venus
+   blob), a different root cause from the GPU firmware issue. Do not conflate them. Note
+   `venus_core` does load as a module; it is the probe that times out.
+2. `gcc-sc7280`/`gpu_cc-sc7280: sync_state() pending due to 3d6a000.gmu` — likely benign: the gmu
    is claimed by the a6xx driver as a component rather than by its own platform_driver, so the
    driver core never marks it probed and `sync_state()` stays pending. Confirm it is harmless
    before spending time on it.
