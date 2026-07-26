@@ -169,6 +169,14 @@ the retry logic itself.
 
 ## Decisions and gotchas worth not re-deriving
 
+- **A `SITE_METHOD = local` package does NOT rebuild when you edit its source tree.** Buildroot keys
+  the build dir and the per-package stamps off `<PKG>_VERSION`, so editing `blobs/qairt-runtime/`
+  left the stamp valid: the build exited 0, the artifact was even repackaged, and the new blobs were
+  silently absent from the image. **Bump `<PKG>_VERSION` whenever the vendored tree changes** — that
+  is the correct signal (the blob set really did change), it forces a fresh build dir, and unlike a
+  `dirclean` it does not require driving Buildroot by hand as root. Applies to every local-site
+  package here: `qairt-runtime`, `qcom-dsp-firmware`, `qcom-dsp-shell`, `aic8800`.
+  Tell-tale: the build log has no `>>> <pkg> <version> Installing to target` line for it.
 - **NEVER `docker run … make` against the build volume as root.** The builder image runs as root
   even when you pass `--env UID=1000 --env GID=100`, so ad-hoc container commands leave
   root-owned `build/`, `host/` and `images/` while Nerves' own build runs as `1000:100`. The result

@@ -267,6 +267,43 @@ established. **Application code that uses the DSP must retry on `0x72` / `0xffff
 assume the first session succeeds.** Blocking boot until a session is provable would be the wrong
 trade -- a board with a dead DSP still has to boot.
 
+## 3b-4b. QNN / HTP validated — 2026-07-26
+
+```
+cmd "qnn-platform-validator --backend dsp --testBackend"
+  dlOpen successfull for library : libcdsprpc.so
+  Backend DSP Prerequisites: Present.
+  Successfully loaded DSP library - 'libQnnHtpV68CalculatorStub.so'
+  Success in executing the sum function
+  Unit Test on the backend DSP: Passed.
+  QNN is supported for backend DSP on the device.
+    Backend Hardware : Supported   Backend Libraries : Found   Unit Test : Passed
+```
+
+Stronger than `fastrpc_test`: this proves the **QNN** stub/skel pair round-trips to the CDSP, which
+is the layer inference code actually uses. **This closes q5** — `libQnnHtpV68Stub.so` does resolve
+`libcdsprpc.so`.
+
+Required vendoring the test-only calculator pair (`libQnnHtpV68CalculatorStub.so` → `usr/lib/`,
+`libCalculator_skel.so` → `usr/lib/dsp/`); see `blobs/qairt-runtime/README.md`. Before that the
+validator reported `Prerequisites: Present` but `Unit Test: Failed` — read the prerequisite lines,
+not the verdict, when the fixture is absent.
+
+`Backend GPU: Not Found` is expected and harmless: QNN's GPU backend wants `libOpenCL.so`, which we
+do not build (mesa would need rusticl/clover). Irrelevant when HTP is the inference target.
+
+**Still undecided — inference runtime (M12 / q8).** `libQnnHtpPrepare.so` is deliberately NOT
+vendored, so there is **no on-device graph compilation**: models must be compiled to context
+binaries on a host with the full SDK. If that changes, add it plus probably
+`hexagon-v68/unsigned/libQnnHtpV68.so` (12.7 MB). The alternative path is ONNX Runtime + QNN EP,
+which needs glibc >= 2.34 (satisfied) and several hundred MB against the 2 GiB slot cap.
+
+**Open licensing question.** `blobs/qairt-runtime/*.so` are tracked in git while the package sets
+`QAIRT_RUNTIME_REDISTRIBUTE = NO`, and `blobs` is in `package_files()` (`mix.exs`) — so a
+`mix hex.publish` or GitHub release would ship Qualcomm proprietary binaries. Options: keep the repo
+private, gitignore the `.so` files and fetch from the SDK at build time, or split them into a
+separate private dependency. Decide before publishing anything.
+
 ## 3b-5. The single most important structural difference from the proven Yocto system
 
 **We have no initramfs; the vendor's ESP ships `q6a-a.cpio.gz`.** Every builtin driver that calls

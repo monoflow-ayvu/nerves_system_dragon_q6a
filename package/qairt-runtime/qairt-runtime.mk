@@ -8,7 +8,11 @@
 #
 ################################################################################
 
-QAIRT_RUNTIME_VERSION = 1.0.0
+# Bump this whenever blobs/qairt-runtime/ changes. Buildroot keys its build dir
+# and its per-package stamps off the version, so editing files inside a `local`
+# SITE without bumping leaves the stamp valid and the new blobs are silently
+# never installed. 1.1.0 adds the test-only calculator stub/skel pair.
+QAIRT_RUNTIME_VERSION = 1.1.0
 QAIRT_RUNTIME_SITE = $(NERVES_DEFCONFIG_DIR)/blobs/qairt-runtime
 QAIRT_RUNTIME_SITE_METHOD = local
 QAIRT_RUNTIME_LICENSE = PROPRIETARY
