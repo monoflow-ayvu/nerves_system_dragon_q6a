@@ -77,7 +77,32 @@ CONFIG_REMOTEPROC=y
 CONFIG_QCOM_RPROC_COMMON=y
 CONFIG_QCOM_PIL_INFO=y
 CONFIG_QCOM_Q6V5_COMMON=y
-CONFIG_QCOM_Q6V5_PAS=y
+# QCOM_Q6V5_PAS is a MODULE on purpose -- same reason as DRM_MSM below.
+# ADSP/CDSP firmware lives on the rootfs, and a builtin PAS driver probes during
+# initcalls, long before prepare_namespace() mounts root. Measured on hardware
+# 2026-07-26 with it builtin:
+#   [0.781178] remoteproc0: Direct firmware load for
+#              qcom/qcs6490/radxa/dragon-q6a/adsp.mbn failed with error -2
+#   [0.782523] remoteproc1: ... cdsp.mbn failed with error -2
+#   [0.782541] remoteproc remoteproc1: request_firmware failed: -2
+# Root mounts at ~5 s. The driver does not retry -- it parks the remoteproc
+# "offline" permanently -- so adsp/cdsp never started, /dev/fastrpc-* never
+# appeared, and every fastrpc_test call failed 0x72 "Unable to create FastRPC
+# session on domain 3". The blobs were present at exactly the requested path
+# all along.
+#
+# Proof this is purely ordering: after boot, `echo start > .../state` on both
+# remoteprocs took them to "running", the three /dev/fastrpc-* nodes appeared,
+# and `fastrpc_test -a v68` went 3/3 PASS (calculator_sum = 499500 computed on
+# the DSP, plus HAP_mem/HAP_perf/FARF and multithreading).
+#
+# As a module, udev loads it after the rootfs is mounted and auto_boot then
+# finds the firmware. qcom-coldplug.sh also recovers any remoteproc left
+# "offline", so a future revert to =y degrades rather than breaks.
+# NOTE: this is what actually resolves M7 -- and not the way predicted. The
+# kernel's RPROC_AUTO_BOOT_RESTART_IF_FW_AVAILABLE path needs the rproc in
+# DETACHED state; these reach "offline", where nothing retries.
+CONFIG_QCOM_Q6V5_PAS=m
 CONFIG_QCOM_SYSMON=y
 CONFIG_QCOM_QMI_HELPERS=y
 CONFIG_QCOM_PDR_HELPERS=y

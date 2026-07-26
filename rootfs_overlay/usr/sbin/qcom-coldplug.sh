@@ -38,23 +38,55 @@ if [ -x /sbin/udevd ] || [ -x /usr/sbin/udevd ]; then
     udevadm settle --timeout=10 2>/dev/null || true
 fi
 
-# 2. Belt-and-braces permissions for the DSP nodes in case the udev rules
-#    didn't cover them (they normally do; see 99-qcom-npu.rules).
-chmod 666 /dev/fastrpc-* 2>/dev/null || true
-chmod 666 /dev/dma_heap/* 2>/dev/null || true
-
-# 3. FastRPC daemons. cdsprpcd keeps the CDSP FastRPC session alive
-#    (audio aDSP equivalent is adsprpcd; only start what's installed).
-#    They write nothing to the rootfs; logs go to the kernel ring buffer.
-#    The qualcomm/fastrpc build installs these under /usr/sbin, which isn't
-#    always on PATH this early, so probe explicit locations.
-for d in cdsprpcd adsprpcd; do
-    for bin in "/usr/sbin/$d" "/usr/bin/$d"; do
-        if [ -x "$bin" ] && ! pidof "$d" >/dev/null 2>&1; then
-            "$bin" &
-            break
-        fi
-    done
+# 2. Remoteproc recovery net. ADSP/CDSP firmware lives on the rootfs, so a
+#    BUILTIN qcom_q6v5_pas requests it during initcalls -- before
+#    prepare_namespace() mounts root -- gets -2, and parks the remoteproc
+#    "offline" forever. That is exactly why the NPU was dead: no /dev/fastrpc-*
+#    and 0x72 from every FastRPC call. QCOM_Q6V5_PAS is =m now so udev loads it
+#    after the rootfs exists and auto_boot succeeds, making this loop a no-op.
+#    It stays as insurance in case the symbol goes back to =y or udev misses the
+#    modalias. Idempotent: anything already "running" is left alone.
+#    NOTE: writing "start" blocks until firmware boot completes, so only do it
+#    for remoteprocs that are actually offline.
+for d in /sys/class/remoteproc/*/; do
+    [ -w "$d/state" ] || continue
+    if [ "$(cat "$d/state" 2>/dev/null)" = "offline" ]; then
+        echo start > "$d/state" 2>/dev/null || true
+    fi
 done
+
+# 3. DSP permissions + FastRPC daemons, in the background.
+#    Remoteproc firmware boot is ASYNCHRONOUS, so `udevadm settle` above does
+#    not imply the DSP is up: /dev/fastrpc-cdsp can appear a moment later, and
+#    cdsprpcd started before it exists simply exits. Wait for the node -- but
+#    never on the critical path, because this script runs before the BEAM and a
+#    board with no working DSP must still boot promptly.
+#    Permissions normally come from udev (99-qcom-npu.rules, MODE="0666"); the
+#    chmod is belt-and-braces for nodes that appeared before the rules loaded.
+(
+    i=0
+    while [ ! -e /dev/fastrpc-cdsp ] && [ "$i" -lt 20 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    [ -e /dev/fastrpc-cdsp ] || exit 0
+
+    chmod 666 /dev/fastrpc-* 2>/dev/null || true
+    chmod 666 /dev/dma_heap/* 2>/dev/null || true
+
+    # cdsprpcd keeps the CDSP FastRPC session alive (adsprpcd is the audio aDSP
+    # equivalent; only start what is installed). They write nothing to the
+    # rootfs; logs go to the kernel ring buffer. The qualcomm/fastrpc build
+    # installs these under /usr/sbin, which is not always on PATH this early,
+    # so probe explicit locations.
+    for d in cdsprpcd adsprpcd; do
+        for bin in "/usr/sbin/$d" "/usr/bin/$d"; do
+            if [ -x "$bin" ] && ! pidof "$d" >/dev/null 2>&1; then
+                "$bin" &
+                break
+            fi
+        done
+    done
+) &
 
 exit 0

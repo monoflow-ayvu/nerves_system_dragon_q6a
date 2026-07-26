@@ -228,6 +228,63 @@ ls -l /dev/tee0 /dev/fastrpc-*                # M11 / fastrpc
 ```
 IEx is the only shell, so run these via `:os.cmd/1` or `System.cmd/2`.
 
+## 3b-4. NPU WORKING — 2026-07-26, unattended after reboot
+
+```
+adsp -> running        /dev/fastrpc-cdsp-secure  crw-rw-rw-
+cdsp -> running        /dev/fastrpc-cdsp         crw-rw-rw-
+pidof cdsprpcd -> 282  /dev/fastrpc-adsp         crw-rw-rw-
+
+LD_LIBRARY_PATH=/usr/lib/fastrpc_test DSP_LIBRARY_PATH=/usr/share/fastrpc_test/v68 \
+  fastrpc_test -a v68
+  [PASS] libcalculator.so      (calculator_sum = 499500, max = 999, computed on the DSP)
+  [PASS] libhap_example.so     (FARF logging, HAP_mem, HAP_perf)
+  [PASS] libmultithreading.so
+  RESULT: All applicable tests PASSED
+```
+
+That validates the whole chain: `cdsp.mbn`, the `fastrpc_shell_unsigned_3` pairing, QTEE accepting
+an **unsigned** protection domain (so the SPI firmware clears the M8 floor), the FastRPC glink
+transport, and the v68 skels. The vendored blobs and the shell pin are correct as-is — no re-harvest
+needed, and the `0x80000600` failure mode never appeared.
+
+**Root cause of the NPU being dead was ordering, not blobs.** `CONFIG_QCOM_Q6V5_PAS` was builtin, so
+it requested `qcom/qcs6490/radxa/dragon-q6a/{adsp,cdsp}.mbn` at ~0.78 s — root mounts at ~5 s — got
+`-2`, and parked both remoteprocs `offline` permanently with no retry. Fixed by making it `=m` plus
+an offline-recovery net in `qcom-coldplug.sh`. This is the **third** instance of one pattern; see the
+warning at the top of §3b-5.
+
+**Known warm-up race — expected, do not treat as a fault.** The *first* `fastrpc_test` immediately
+after boot can partially fail even though everything above reads healthy:
+```
+Error occurred with selector PERF (id: 2): -1
+[PASS] libcalculator.so
+ERROR 0xffffffff / 0x72: Unable to create FastRPC session on domain 3
+[FAIL] libhap_example.so   [FAIL] libmultithreading.so
+```
+Re-running a few seconds later gives 3/3. `cdsprpcd` has a PID before its CDSP session is fully
+established. **Application code that uses the DSP must retry on `0x72` / `0xffffffff` rather than
+assume the first session succeeds.** Blocking boot until a session is provable would be the wrong
+trade -- a board with a dead DSP still has to boot.
+
+## 3b-5. The single most important structural difference from the proven Yocto system
+
+**We have no initramfs; the vendor's ESP ships `q6a-a.cpio.gz`.** Every builtin driver that calls
+`request_firmware*()` therefore fails on our system, because `prepare_namespace()` mounts the root
+filesystem only after `do_basic_setup()` finishes all initcalls. Three separate bugs tonight were
+this one cause:
+
+| Driver | Firmware | Symptom |
+|---|---|---|
+| `DRM_MSM` (was `=y`) | `a660_sqe.fw`, `a660_gmu.bin` | `-2`, no GPU, "Cannot find any crtc or sizes" |
+| `QCOM_Q6V5_PAS` (was `=y`) | `adsp.mbn`, `cdsp.mbn` | `-2`, remoteprocs `offline`, NPU dead, `0x72` |
+| `r8169` (`=y`, benign) | MDIO PHY module | `kmod.c:143` WARN; harmless, `REALTEK_PHY=y` |
+
+**Before making any firmware-loading driver builtin, check whether it needs the rootfs.** Copying
+the vendor's `=y` verbatim is wrong for us unless we also add an initramfs. Next suspect: Venus
+(`aa00000.video-codec`, `-110`) -- it is already `=m`, so its timeout is probably something else,
+but confirm before assuming M3's "wrong blob" diagnosis.
+
 ## 4. Acceptance test (§9 of the task doc)
 
 On a freshly flashed image, over serial, no manual setup:
