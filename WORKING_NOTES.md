@@ -325,6 +325,13 @@ appends arbitrary `QNN.*` provider options, so option/model experiments are one 
 
 ### Real AI Hub model: everything loads, execution is still 100% CPU
 
+> **WRONG — SUPERSEDED.** See "THE NPU IS WORKING" below. The A/B in this section (QNN 32562 vs
+> "CPU" 32660 us, identical output) had **both sides running on the NPU**: `ORTEX_QNN_SKIP=1` does
+> not produce a CPU baseline when the DSP environment is configured, because ORT auto-selects the
+> registered plugin EP (see the gotcha below). The identical outputs were identical precisely
+> *because* both used the HTP. Re-measured properly, this same pose model is
+> **888.3 ms/iter on CPU vs 25.1 ms/iter on the HTP — 35x.**
+
 Model: `~/radxa-yolov11/aihub_pose_s/job_jgk9m4zy5_qdq_onnx/` (yolov11-pose-small, Qualcomm AI Hub
 QDQ export) — `model.onnx` 524 KB + `model.data` 40 MB external weights, input `images`
 f32 [1,3,640,640], output `output0` [1,56,8400], 1390 nodes
@@ -366,50 +373,102 @@ the earlier `Unable to get platform info: Failed to get HTP arch` suggests the E
 talking to the DSP properly — possibly needing `soc_model` alongside `htp_arch`, or the unsigned-PD
 `fastrpc_shell_unsigned_3` reachable in the same `DSP_LIBRARY_PATH`.
 
-### *** CORRECTION: the NPU is NOT doing the compute. ***
+### Python reference: ALSO does not reach the NPU, and exposes a harness discrepancy
 
-**The "NPU CONFIRMED WORKING" claim in commit 8702ebf is WRONG.** It rested on onnxruntime's
-node-placement report, which is necessary but not sufficient. Wall-vs-CPU-time proves the ARM cores
-are doing the work:
+Ran the vendor-path reference on the board — Buildroot's Python 3.14.5 + numpy 2.4.0 (matching the
+`cp314` wheel ABI exactly), with the upstream `onnxruntime` 1.28.0 and `onnxruntime_qnn` 2.4.0
+site-packages extracted to `/root/py` (18 MB tarball, unpacked with Erlang's `:erl_tar`; sftp's
+`put -r` silently does nothing in batch mode). Script: `/root/ref.py`.
 
 ```
-CPU only  | 30 iters: wall 835 ms (27.8 ms/iter), process CPU 4650 ms (557% of wall)
-NPU burst | 30 iters: wall 766 ms (25.5 ms/iter), process CPU 4370 ms (570% of wall)
+PY CPU | session providers: ['CPUExecutionProvider']   fastrpc fds: []
+PY CPU | 30 iters: wall 26612 ms (887.1 ms/iter), process CPU 207116 ms (778% of wall)
+PY QNN | registering QNNExecutionProvider from /root/py/onnxruntime_qnn/libonnxruntime_providers_qnn.so
+PY QNN | session providers: ['CPUExecutionProvider']   fastrpc fds: []
+PY QNN | 30 iters: wall 28172 ms (939.1 ms/iter), process CPU 219179 ms (778% of wall)
 ```
 
-~5.7 ARM cores saturated in *both* cases. If the HTP were computing, process CPU time would be a
-small fraction of wall time. The 27 vs 32 ms differences chased earlier were run-to-run noise, and
-the bit-identical CPU-vs-NPU outputs are explained trivially: it is the same computation on the same
-hardware.
+**Python does not use the NPU either — and fails earlier than the Rust path.** After
+`register_execution_provider_library("QNNExecutionProvider", ...)` succeeds, the EP does not appear in
+`sess.get_providers()` at all, and no `/dev/fastrpc-*` is ever opened. The Rust/`ort` path at least
+got the graph *assigned* to `QNNExecutionProvider` in the placement report and opened
+`/dev/fastrpc-cdsp-secure`. So the Elixir-facing stack is **ahead of** the vendor reference here, and
+"just use Python" is not an escape hatch on this system.
 
-This is the *third* time in this effort that a plausible-looking signal was not proof — matching
-output values, then a 4.8x timing difference, then the placement report. **The trustworthy test for
-"is the accelerator doing it" is wall-clock vs process-CPU-time**, which the probe now reports
-(`ORTEX_ITERS`).
+### *** THE NPU IS WORKING: 38x. Both earlier verdicts were measurement errors. ***
 
-**Most promising lead.** The probe's open file descriptors during inference:
+Running the Rust probe's own CPU baseline against Python's on the *same* model finally gave a common
+reference point, and it invalidates the retraction that used to be in this section. All four runs
+below: `/root/det/model.onnx` (yolo11s QDQ), input `images` f32 [1,3,640,640], 30 iterations.
+
+| harness | ms/iter | process CPU as % of wall | `first6` |
+|---|---|---|---|
+| Rust, `ORTEX_QNN_SKIP=1` (CPU) | 920.6 | 772% | `[28.048985, 29.758934, 30.953955, ...]` |
+| Python, `SKIP_QNN=1` (CPU) | 887.1 | 778% | `[28.04898, 29.75893, 30.95395, ...]` ← identical |
+| Python + QNN registered | 939.1 | 778% | identical to CPU — EP never selected |
+| **Rust + QNN (`htp_arch=68`, burst)** | **24.2** | 595% | `[26.86368, 28.729078, 28.466757, ...]` |
+
+Same measurement on the pose model (`/root/pose/model.onnx`, yolov11-pose-small QDQ): CPU
+888.3 ms/iter (`first6=[14.324512, 21.682695, ...]`) vs HTP 25.1 ms/iter
+(`first6=[15.946361, 22.673222, ...]`) — **35x**. Both models therefore land at ~23-25 ms/iter on the
+HTP and ~890-920 ms/iter on the ARM cores.
+
+The two independent CPU baselines agree to 4% and produce byte-identical outputs, so the harnesses
+are sound and mutually validating. Against that real baseline the QNN path is **38x faster**
+(920.6 → 24.2 ms/iter), and first-run-including-graph-prepare is 864 → 36 ms. 24 ms/iter for
+int8 yolo11s is the expected HTP v68 ballpark. The differing `first6` is the expected consequence of
+HTP quantized arithmetic rather than a bug.
+
+**Falsification test (the one that actually settles it).** Same QNN configuration, but with the
+Hexagon skel made unreachable — `ADSP_LIBRARY_PATH=/nonexistent DSP_LIBRARY_PATH=/nonexistent`:
 ```
-fastrpc fds: ["/dev/dma_heap/system", "/dev/fastrpc-cdsp-secure"]
+session OK; libQnnHtp mapped now = true
+first run (incl. graph prepare): 871 ms
+3 iters: wall 2511 ms (837.1 ms/iter), process CPU 19190 ms (764% of wall)
 ```
-QNN opens the **secure/signed** CDSP domain, not the unsigned one. Everything validated on this
-board uses the **unsigned** PD: `fastrpc_test -a v68` and `qnn-platform-validator` both go through
-`fastrpc_shell_unsigned_3`, and BRINGUP.md §1 records that below the SPI firmware floor QTEE rejects
-unsigned PDs with `0x80000600`. So QNN is likely opening a signed PD it cannot actually run in, then
-falling back to a CPU implementation *inside* its own node — which is exactly consistent with a
-correct placement report and full ARM utilisation.
+Remove the DSP-side code and the identical configuration collapses to exactly CPU speed **while
+still reporting `session OK` and logging no error**. The Hexagon skel is load-bearing, therefore the
+compute is on the DSP. This also documents the silent-CPU-fallback failure mode directly.
 
-Next step: force the HTP backend into unsigned PD. In the QNN SDK this is
-`QnnHtpDevice_CustomConfig_t`/`unsignedPD`; check whether ORT's QNN EP exposes it as a provider
-option (the ones we know work are `backend_path`, `htp_arch`, `htp_performance_mode`,
-`htp_graph_finalization_optimization_mode`, `enable_htp_shared_memory_allocator`). If not exposed,
-the C++ EP source or an `ep.qnn.*` session config key is the place to look. A cheap corroboration
-first: check whether `/dev/fastrpc-cdsp` (unsigned) is ever opened instead, e.g. by running the
-probe with the unsigned shell reachable and comparing fds.
+**Why the retraction was wrong: CPU%-of-wall is not an offload signal.** The retracted verdict
+compared "CPU 27.8 ms/iter" against "NPU 25.5 ms/iter" and concluded no acceleration — but that
+27.8 ms figure was never a CPU baseline (the real one is 920 ms/iter; it was a mislabelled QNN run).
+The 595%-of-wall that looked damning is ORT's intra-op thread pool **spin-waiting** on the DSP:
+24.2 ms × ~6 spinning cores ≈ 143 ms of charged CPU per iteration doing nothing. Spin-wait and
+compute are indistinguishable in `/proc/self/stat`, so that ratio cannot distinguish them either.
+The wall-clock-against-a-real-baseline plus remove-the-accelerator pair is the test that can.
 
-Everything below about *loading* the stack is still correct and hard-won; only the
-"it runs on the NPU" conclusion is retracted.
+**THE GOTCHA THAT CAUSED EVERY EARLIER MISREADING: ORT auto-selects a registered plugin EP.**
+Once `register_ep_library()` has been called and the HTP backend can initialise, a *plain*
+`Session::builder()` with no EPs and no `with_devices()` still runs on the NPU:
+```
+(QNN skipped: CPU baseline)          <- the probe's own ORTEX_QNN_SKIP=1 path
+first run (incl. graph prepare): 36 ms
+5 iters: wall 145 ms (29.0 ms/iter), process CPU 810 ms (559% of wall)
+```
+29 ms/iter, i.e. the NPU. So **`ORTEX_QNN_SKIP=1` is only a genuine CPU baseline when the HTP
+backend cannot come up** — in practice, when `DSP_LIBRARY_PATH`/`ADSP_LIBRARY_PATH`/
+`ORTEX_QNN_BACKEND_PATH` are left unset. Every "no difference between QNN and CPU" result in this
+document came from an A/B where both arms were on the NPU. For a trustworthy baseline, either unset
+the DSP environment or point `ADSP_LIBRARY_PATH` at a nonexistent directory.
 
-### The stack loads correctly. Full recipe (loading, NOT acceleration).
+Two useful consequences: on this ORT version an Elixir caller may get the NPU without asking for it
+(good for us, but it means `Ortex.load/2` without `:qnn` is not a CPU guarantee), and any future
+benchmark in this repo must state which of the two baseline methods it used.
+
+**Dead hypothesis: signed vs unsigned PD.** `fastrpc fds: ["/dev/dma_heap/system",
+"/dev/fastrpc-cdsp-secure"]` appears in the **CPU baseline too** — it is opened when `libQnnHtp.so`
+is loaded, before any execution. It was never evidence about execution, so there is nothing to fix
+here; `QnnHtpDevice_CustomConfig_t`/`unsignedPD` is not needed.
+
+**Python is the one that does not work.** `register_execution_provider_library("QNNExecutionProvider",
+...)` succeeds, then the EP never appears in `sess.get_providers()` and no `/dev/fastrpc-*` is
+opened. Passing `providers=[(name, opts), "CPUExecutionProvider"]` apparently does not route a
+*plugin* EP on this build — the V2 device path (`with_devices`) that the Rust side uses is what
+selects it. So the Elixir/Rust stack is **ahead of** the vendor Python reference, and "just use
+Python" is not an escape hatch here.
+
+### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):
 ```
@@ -669,3 +728,9 @@ same ABI, so linking is fine.
   `Unreleased`.
 - The `fable5` risk-guard false-positives on the shell command `truncate` (reads it as SQL
   TRUNCATE). Use `dd ... seek=` to make sparse files.
+
+<!-- AUTO-HANDOFF (PreCompact/auto) 2026-07-26T19:40:23Z -->
+### Compaction handoff — 2026-07-26T19:40:23Z
+- Git: branch `main`, 1 uncommitted file(s): WORKING_NOTES.md 
+- Last verification run recorded: 2026-07-26T19:36:22Z	T=/tmp/claude-1000/-home-fermuch-Documents-Dev-AYVU-nerves-system-dragon-q6a/b5e1265e-3d92-4e4c-9105-598d18a6100e/scratc
+- RESUME: re-read the Task/Status/Next-action sections above; trust this file over recollection.

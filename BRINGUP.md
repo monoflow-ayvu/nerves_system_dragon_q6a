@@ -292,11 +292,41 @@ not the verdict, when the fixture is absent.
 `Backend GPU: Not Found` is expected and harmless: QNN's GPU backend wants `libOpenCL.so`, which we
 do not build (mesa would need rusticl/clover). Irrelevant when HTP is the inference target.
 
-**Still undecided — inference runtime (M12 / q8).** `libQnnHtpPrepare.so` is deliberately NOT
-vendored, so there is **no on-device graph compilation**: models must be compiled to context
-binaries on a host with the full SDK. If that changes, add it plus probably
-`hexagon-v68/unsigned/libQnnHtpV68.so` (12.7 MB). The alternative path is ONNX Runtime + QNN EP,
-which needs glibc >= 2.34 (satisfied) and several hundred MB against the 2 GiB slot cap.
+## 3b-4c. End-to-end inference ON the NPU — measured, 2026-07-26
+
+ONNX Runtime 1.28 + the `onnxruntime_qnn` 2.4.0 plugin EP executes real Qualcomm AI Hub QDQ models on
+the HTP. Measured on-device, 30 iterations, input `images` f32 [1,3,640,640]:
+
+| model | CPU | HTP | speedup |
+|---|---|---|---|
+| yolo11s detection | 920.6 ms/iter | **24.2 ms/iter** | 38x |
+| yolo11s-pose | 888.3 ms/iter | **25.1 ms/iter** | 35x |
+
+Verified by falsification, not just by timing: with the Hexagon skel made unreachable
+(`ADSP_LIBRARY_PATH=/nonexistent`) the identical configuration drops to 837 ms/iter while still
+reporting `session OK` — so the DSP-side code is load-bearing. The CPU column was cross-checked with
+a pure-Python `onnxruntime` run that produced **byte-identical** outputs (887.1 ms/iter).
+
+Three measurement traps, all of which produced wrong verdicts earlier in this effort — see
+WORKING_NOTES.md for the full account:
+1. **ORT auto-selects a registered plugin EP.** A plain session with no EP requested still runs on
+   the NPU once the HTP backend can initialise. A CPU baseline requires the DSP environment unset.
+2. **Process-CPU-time vs wall time does not detect offload.** The HTP path still charges ~6 cores
+   (595% of wall) because ORT's thread pool spin-waits on the DSP.
+3. **`/dev/fastrpc-cdsp-secure` in the fd list means nothing** — it is opened when `libQnnHtp.so`
+   loads, in the CPU baseline too.
+
+**Version skew is the real requirement.** The QAIRT 2.42 runtime in `blobs/qairt-runtime/` cannot
+serve ORT's QNN EP (`Unable to find a valid interface for /usr/lib/libQnnHtp.so`); the QNN 2.4.0
+libraries shipped inside the `onnxruntime_qnn` wheel do, and the V68 **skel** must match too or the
+session fails with `QNN_DEVICE_ERROR_INVALID_CONFIG`. `DSP_LIBRARY_PATH` is `;`-separated and
+order-sensitive — the wheel's directory must come first.
+
+**Resolved — inference runtime (M12 / q8).** `libQnnHtpPrepare.so` **is** required and on-device graph
+compilation **does** work (36 ms first run including prepare), so models do not have to be
+pre-compiled to context binaries on a host. Path chosen: ONNX Runtime + QNN plugin EP, reached from
+Elixir through the patched `ortex` fork. Needs glibc >= 2.34 (satisfied) and ~115 MB of libraries
+against the 2 GiB slot cap.
 
 **Open licensing question.** `blobs/qairt-runtime/*.so` are tracked in git while the package sets
 `QAIRT_RUNTIME_REDISTRIBUTE = NO`, and `blobs` is in `package_files()` (`mix.exs`) — so a
