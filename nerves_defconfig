@@ -46,9 +46,19 @@ BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
 # fixes. It also re-enables qcom,ice (3d40d3a11) together with the matching
 # HWKM-v1 driver support (fc1bab211) — take both or neither.
 #
-# Accepted loss (q7, decided 2026-07-25): the four Deka-only changes go, incl.
-# the doubled shared DMA-buf size. If dma-buf allocation failures ever appear
-# under heavy GPU/NPU/camera load, reinstate that as a patch in patches/.
+# The four Deka-only changes go (q7, decided 2026-07-25). This costs less than
+# the porting doc implied: the "doubled shared DMA-buf size" commit (e05c4fae)
+# only ever modified qcs6490-radxa-dragon-q6a-DEKA-BOARD.dts, i.e. Deka's own
+# carrier board, never the qcs6490-radxa-dragon-q6a we build — so it was never
+# active for us. The Deka tree was v6.18.0 plus a point-in-time snapshot of
+# Radxa's own enablement work, with four Deka patches on top for a different
+# board; radxa/kernel continues that same lineage.
+#
+# The only Deka patches that touched SHARED drivers, i.e. the real candidates
+# if we ever need them: 52a1da01 "fix 4K 30 fps" (dpu_7_2_sc7280.h,
+# dp_display.c, dp_panel.c) and 3b0e34ee HDMI-audio hw_params
+# (drm_hdmi_audio_helper.c). Check whether radxa/kernel already covers them
+# before carrying either in patches/.
 #
 # USE_ARCH_DEFAULT_CONFIG below stays valid: both trees'
 # arch/arm64/configs/defconfig are byte-identical (verified — 44334 bytes,

@@ -150,8 +150,13 @@ CONFIG_FW_LOADER_COMPRESS_ZSTD=y
 
 # ============================================================
 # Board peripherals (cross-checked against the pinned DTS,
-# qcs6490-radxa-dragon-q6a.dts @ e05c4fa). Headless-critical
+# qcs6490-radxa-dragon-q6a.dts @ 559f4f92). Headless-critical
 # hardware is =y; media/audio is =m (loaded by udev coldplug).
+#
+# NOTE: the B7 tree switch replaced this DTS. radxa/kernel re-enables
+# qcom,ice, which the previous Deka DTS deleted, so this section was
+# cross-checked against a different file than it originally was.
+# Re-verify it against the board on bench.
 # ============================================================
 
 # --- PCIe (pcie0: RTL8111 GbE, pcie1: M.2 NVMe) ---

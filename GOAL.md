@@ -29,7 +29,7 @@ be validated *without* the board must be validated here first.
 - [x] Repo skeleton complete (mix.exs, nerves_defconfig, fwup.conf,
       fwup-ops.conf, grub.cfg, post-build/post-createfs, overlay,
       Dockerfile, shell.nix), modeled on `../nerves_system_orangepi6`.
-- [x] Kernel pinned by commit SHA (Deka `linux-dragon-q6a` @ e05c4fa),
+- [x] Kernel pinned by commit SHA (`radxa/kernel` `linux-6.18.2` @ 559f4f92),
       config carries the FastRPC stack (`QCOM_FASTRPC`, `QCOM_Q6V5_PAS`,
       GLINK, SMEM, dmabuf heaps, UFS/SD, sc7280 clk/pinctrl/interconnect,
       SMMU) **and** virtio (blk/net/pci) - same kernel boots QEMU. Built OK.
@@ -99,7 +99,7 @@ be validated *without* the board must be validated here first.
 | nerves_system_br | 1.34.0 (Buildroot 2026.05) |
 | Toolchain | nerves_toolchain_aarch64_nerves_linux_gnu 15.3.0 (glibc) |
 | Erlang/OTP (target+host) | 28 (28.5.0.2) / Elixir 1.19.5 |
-| Kernel | Deka `linux-dragon-q6a` branch `dragon-q6a-v6.18` @ `e05c4faeded00da418899bd7fb03be473ca18981` (mainline 6.18.0 + Dragon Q6A patches) |
+| Kernel | `radxa/kernel` branch `linux-6.18.2` @ `559f4f921a01e5358602153364c618fe2a3e431e` (6.18.2 + ~70 Radxa board commits; the tree the proven Yocto system uses). Was Deka `linux-dragon-q6a` @ `e05c4fa` until the B7 switch — see PORTING-FROM-YOCTO.md |
 | DTB | `qcom/qcs6490-radxa-dragon-q6a` (in-tree; includes mainline `sc7280.dtsi`, carries CDSP/ADSP remoteproc + `qcom,fastrpc` glink nodes) |
 | DSP shell | linux-msm/hexagon-dsp-binaries @ `2ba83638…` → `qcs6490/radxa/dragon-q6a/CDSP.HT.2.5.c4-00004-KODIAK-1` (CDSP) + `ADSP.HT.5.5.c9-00028-KODIAK-2` (ADSP) |
 | cdsp.mbn / adsp.mbn | Vendored in `blobs/qcom-dsp-firmware/` from upstream linux-firmware (`qcom/qcs6490/radxa/dragon-q6a/`, Redistributable). CDSP version matches the shell string above. |

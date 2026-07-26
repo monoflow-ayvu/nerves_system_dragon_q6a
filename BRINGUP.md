@@ -104,7 +104,7 @@ shell: `fastrpc_test -a v68`.
 | Component | Planned | Observed on bench |
 | --- | --- | --- |
 | UEFI firmware | latest Radxa snapshot | |
-| Kernel | 6.18.0 (Deka e05c4fa) | |
+| Kernel | 6.18.2 (radxa/kernel 559f4f92) | |
 | cdsp.mbn version string | CDSP.HT.2.5.c4-00004-KODIAK-1 | |
 | fastrpc_shell_unsigned_3 | same as cdsp.mbn | |
 | `fastrpc_test -a v68` | PASS | |

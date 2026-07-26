@@ -9,7 +9,7 @@ present and version-matched at first boot.
 | Feature | Description |
 | --- | --- |
 | CPU | Qualcomm QCS6490 (QCM6490 family; sc7280 mainline lineage) |
-| Linux kernel | 6.18.0 (Deka `linux-dragon-q6a`, mainline + minimal board patches) |
+| Linux kernel | 6.18.2 (`radxa/kernel` `linux-6.18.2` @ `559f4f92`, the tree the proven Radxa Yocto build uses) |
 | Boot | on-board Qualcomm UEFI → GRUB (arm64-efi) on ESP → A/B squashfs slots with auto-rollback |
 | Console | debug UART `ttyMSM0`, 115200 8N1 |
 | NPU | Hexagon CDSP via FastRPC/remoteproc/GLINK; DSP firmware + shell + libs pre-installed |

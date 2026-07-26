@@ -102,9 +102,26 @@ Committed Phase 1 as `2497e2e` on branch **`phase1-yocto-parity`** (was on `main
 | 23 | fwup floor: `Dockerfile` `FWUP_VERSION` 1.13.1→**1.16.0**, `fwup.conf` `require-fwup-version` 1.12.0→**1.14.0**. Both release assets verified to exist (HTTP 200); host fwup 1.15.1 parses past the new floor | code done |
 | 8 | **B7** kernel tree switch — **q7 answered: take `radxa/kernel` clean, no DMA-buf patch** | BLOCKED until the running build finishes (`nerves_defconfig` is a `package_files()` input) |
 
-**q7 resolved (user, 2026-07-25):** drop the four Deka-only changes, including the doubled shared
-DMA-buf size. Accepted risk: dma-buf exhaustion under heavy GPU/NPU/camera buffer load, which QEMU
-cannot surface. If that ever appears, the fix is to reinstate it as a patch in `patches/`.
+**q7 resolved (user, 2026-07-25):** drop the four Deka-only changes.
+
+**The q7 risk was overstated — corrected after reading the actual commits.** `e05c4fae`
+("deka-board double shared dma buf size") modifies only
+`arch/arm64/boot/dts/qcom/qcs6490-radxa-dragon-q6a-deka-board.dts` — **Deka's own carrier board**,
+not `qcs6490-radxa-dragon-q6a`, which is what we build. It was never active for us, so dropping it
+costs nothing; there is no dma-buf-exhaustion risk to accept.
+
+What the Deka fork actually was: v6.18.0 + 31 commits, of which ~27 are a point-in-time snapshot of
+*Radxa's own* enablement work (board DTS, `qcom_module_defconfig`, UFS/eMMC, PCIe, dpu catalog,
+`remoteproc: core: Allow auto retry of rproc_start()`, plus a self-described **temporary**
+`qmp-combo: fix the orientation to reverse` hack). Only the last four commits are Deka's, for their
+own board. radxa/kernel is the continuation of the same lineage — 6.18.2 stable base, ~70 board
+commits — not a competing tree.
+
+The only Deka patches touching *shared* drivers, i.e. the real candidates if ever needed:
+- `52a1da01` "fix 4K 30 fps" → `dpu_7_2_sc7280.h`, `dp_display.c`, `dp_panel.c`
+- `3b0e34ee` HDMI-audio `hw_params` → `drm_hdmi_audio_helper.c`
+Check whether radxa/kernel already covers these before porting either.
+
 Taking the tree wholesale also resolves the ICE caveat for free — Radxa's `qcom,ice` re-enable
 (`3d40d3a11`) and its HWKM-v1 driver support (`fc1bab211`) arrive together, which is what B7 warns
 against splitting.
@@ -120,6 +137,35 @@ before trusting it.** Then update the doc references B7 lists: `GOAL.md:31,98`, 
 
 Deliberately doing two builds rather than one: the in-flight build gates B2/B4/M11 on the *current*
 Deka tree, so if a symbol turns out not to exist we learn that independently of the tree swap.
+
+## Phase 3 — re-scope M7 before implementing it
+
+**M7 (retry remoteproc firmware load after the rootfs is up) may be largely solved in-kernel by
+the B7 tree switch. Do not write the shell retry loop before checking the board.**
+
+radxa/kernel carries a mechanism mainline does not have. Upstream 6.18 has a plain
+`bool auto_boot`; this tree has a tri-state (`include/linux/remoteproc.h:521-525`):
+```c
+enum rproc_auto_boot {
+	RPROC_AUTO_BOOT_DISABLED,
+	RPROC_AUTO_BOOT_ATTACH_OR_START,
+	RPROC_AUTO_BOOT_RESTART_IF_FW_AVAILABLE,
+};
+```
+`drivers/remoteproc/remoteproc_core.c:1943-1951` — when a remoteproc is `RPROC_DETACHED` (already
+running from XBL/TZ) and `auto_boot == RESTART_IF_FW_AVAILABLE`, `rproc_boot()` re-runs
+`request_firmware()`; if the firmware is now present it logs
+`"restarting %s with new firmware"`, stops the pre-booted instance and restarts it with ours.
+`drivers/remoteproc/qcom_q6v5_pas.c:767` is what selects that mode.
+
+That is precisely M7's problem — firmware not yet reachable at probe time — handled with correct
+stop/restart semantics. Deka solved the same thing differently, with
+`a2cfed4d remoteproc: core: Allow auto retry of rproc_start()`.
+
+So on bench, first check `dmesg | grep -iE "restarting .* with new firmware|remoteproc"` and
+`/sys/class/remoteproc/*/state`. A naive shell retry could fight this rather than help. What may
+still be needed is only the *trigger* (something calling `rproc_boot` once the rootfs is up), not
+the retry logic itself.
 
 ## Decisions and gotchas worth not re-deriving
 
