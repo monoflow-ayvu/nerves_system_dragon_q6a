@@ -231,6 +231,47 @@ fork now calls `.error_on_failure()` on the QNN dispatch, which is what surfaced
 `Example.NPU.prove_qnn/1` automates the falsification check and returns
 `:qnn_genuinely_used | :silently_on_cpu | :inconclusive`.
 
+### rc.12 attempt: plugin EP now LOADS, backend still does not
+
+Fork branch `../ortex` `qnn-rc12`, based on upstream **PR #47** ("Modernise, update to Ort
+2.0.0-rc.11", MERGEABLE, +1012/-810) — worth reusing: it moves to rustler 0.37.1, ndarray 0.17.2,
+and already makes `map_eps` return `Result` and error on unknown EP atoms (the silent-CPU trap I had
+patched by hand). PR #46 (rc.10) is CONFLICTING and 2.6x larger; neither PR reaches rc.12.
+
+**rc.12 is mandatory**: `Environment::register_ep_library` (the ORT >= 1.23
+`RegisterExecutionProviderLibrary`) exists in rc.12 and **not** in rc.10/rc.11 — checked per tag.
+
+Changes on top of PR #47:
+- `ort` -> `2.0.0-rc.12`, `default-features = false`, features
+  `std, ndarray, half, tracing, load-dynamic, api-24`. `api-24` implies `api-22`, which gates
+  `register_ep_library`; `load-dynamic` also satisfies the cfg on `QNN::register()`.
+- rc.12 moved `ort::tensor::TensorElementType` -> `ort::value::TensorElementType` (2 imports).
+- QNN is **not** routed through `map_eps` any more: plugin EPs are selected with the V2 device API
+  (`SessionBuilder::with_devices`, which calls `SessionOptionsAppendExecutionProvider_V2`), not by
+  appending an `ExecutionProviderDispatch`. `utils::wants_qnn` filters `:qnn` out of the dispatch
+  list and `model::init` takes a `use_qnn` flag and does register + `with_devices`.
+- Every QNN failure is an error, never a silent CPU fallback (including "no QNN device found after
+  registering ...", which lists the EP names actually seen).
+
+**Progress that is real:** `/proc/self/maps` after a `:qnn` run now shows
+`libonnxruntime_providers_qnn.so` **mapped**. On rc.8 it never was, and the session errored with
+"QNN execution provider is not supported in this build." So registration + device selection work.
+
+**Still blocked:** `libQnnHtp.so` / `libQnnSystem.so` / `libQnnHtpV68Skel.so` are **never mapped**,
+and `prove_qnn/0` still reports `:silently_on_cpu`. Two candidate causes, untested:
+1. The `backend_path` provider option is not reaching the plugin. `with_devices` options must be
+   EP-name-prefixed (ort's own example uses `"CPUExecutionProvider.use_arena"`). We now pass both
+   `"<ep_name_from_device>.backend_path"` and a bare `"backend_path"`; neither loaded the backend, so
+   the real key may differ (possibly the *registration* name, `"QNN.backend_path"`).
+2. The EP claims **no nodes** for the QDQ MatMul graph and therefore never initialises a backend.
+   That would make the backend_path question moot.
+
+Cheapest way to separate them: get the EP name and node assignment out of onnxruntime. Its own
+logging is the direct route — ortex has `// tracing_subscriber::fmt::init();` commented out
+(`model.rs:42-43`), and ORT's stderr goes to the console (tty1), not the SSH session, so wire a
+subscriber that writes somewhere readable, or enable ORT session profiling (it emits a JSON with a
+per-node EP assignment). Do that before changing more option keys by guesswork.
+
 ### Options to actually get the NPU (pick one)
 
 1. **Bump the fork's `ort` to rc.12+ and use plugin registration.** `RegisterExecutionProviderLibrary`
