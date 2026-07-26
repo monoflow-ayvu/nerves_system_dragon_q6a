@@ -323,6 +323,49 @@ likely the uint8 weights with scale 1.0 / zero-point 0 are not a legal FullyConn
 appends arbitrary `QNN.*` provider options, so option/model experiments are one sftp + one
 `:os.cmd` apart instead of a 5-minute build-flash cycle.
 
+### Real AI Hub model: everything loads, execution is still 100% CPU
+
+Model: `~/radxa-yolov11/aihub_pose_s/job_jgk9m4zy5_qdq_onnx/` (yolov11-pose-small, Qualcomm AI Hub
+QDQ export) — `model.onnx` 524 KB + `model.data` 40 MB external weights, input `images`
+f32 [1,3,640,640], output `output0` [1,56,8400], 1390 nodes
+(566 DequantizeLinear / 470 QuantizeLinear / 97 Conv). A genuinely HTP-shaped graph, unlike the
+hand-written QDQ MatMul, which the HTP rejected outright (`error code 4000`).
+
+Two more requirements discovered with it:
+5. **`libQnnHtpPrepare.so` (89 MB) is required.** Without it the session fails to commit:
+   `Node '/model.0/conv/Conv_token_27' OpType:Conv with domain:com.ms.internal.nhwc was inserted
+   using the NHWC format as requested by QNN, but was not selected by that EP`. So QNN's
+   GetCapability *did* claim Conv nodes and request a layout transform, then declined them because
+   it could not compile. Adding Prepare makes the session commit cleanly.
+6. **`DSP_LIBRARY_PATH` order matters and uses `;`.** `"/root/qnnlibs;/usr/lib/dsp"` works;
+   `"/usr/lib/dsp;/root/qnnlibs"` finds the QAIRT 2.42 skel first and gives
+   `QNN_DEVICE_ERROR_INVALID_CONFIG` plus a 27x slowdown (886 ms).
+
+**But it is not on the NPU.** A/B on the identical model and input:
+```
+QNN : 32562 us   first6=[15.946361, 22.673222, ...]
+CPU : 32660 us   first6=[15.946361, 22.673222, ...]   (ORTEX_QNN_SKIP=1)
+```
+0.3% apart with bit-identical output — the QNN EP claims no nodes and everything executes on CPU,
+while the session reports success and logs no error.
+
+**Correction to an earlier check:** `QnnHtpV68Skel` absent from `/proc/self/maps` proves nothing.
+The skel is a **Hexagon** ELF loaded onto the DSP over FastRPC; it never maps into the ARM process.
+Wall-clock against a CPU baseline is the honest signal, which is why the probe has
+`ORTEX_QNN_SKIP=1`.
+
+`Some nodes were not assigned to the preferred execution providers` is generic ORT boilerplate and
+is **not** evidence QNN took anything.
+
+**Next diagnostic — stop guessing option keys, get the per-node assignment.** Enable ORT session
+profiling (`enable_profiling` + `profile_file_prefix`); it writes a JSON where every node carries the
+EP that ran it. That answers "did QNN claim any nodes, and if not which op rejected first" in one
+run. QNN EP also accepts `profiling_level` and `qnn_saver_path` options for its own tracing. Two
+loose threads to check while there: `libQnnSystem.so` is never mapped even on the working path, and
+the earlier `Unable to get platform info: Failed to get HTP arch` suggests the EP may still not be
+talking to the DSP properly — possibly needing `soc_model` alongside `htp_arch`, or the unsigned-PD
+`fastrpc_shell_unsigned_3` reachable in the same `DSP_LIBRARY_PATH`.
+
 ### Options to actually get the NPU (pick one)
 
 1. **Bump the fork's `ort` to rc.12+ and use plugin registration.** `RegisterExecutionProviderLibrary`
