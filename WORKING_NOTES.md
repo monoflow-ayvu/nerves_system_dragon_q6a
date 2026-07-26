@@ -272,6 +272,57 @@ logging is the direct route — ortex has `// tracing_subscriber::fmt::init();` 
 subscriber that writes somewhere readable, or enable ORT session profiling (it emits a JSON with a
 per-node EP assignment). Do that before changing more option keys by guesswork.
 
+### PURE-RUST PROBE: the plumbing is solved. Recipe below.
+
+`../qnn-probe` is a standalone Rust binary (no Elixir/rustler/BEAM) cross-compiled for the board and
+run over SSH via `:os.cmd(... 2>&1)`, which is what finally made ONNX Runtime's own logs visible —
+the missing diagnostic all along. Deploy with **sftp** (`nerves_ssh` has the sftpd subsystem, so
+`sftp nerves.local` works; 1.2 MB binary to `/root`, `File.chmod!(path, 0o755)` to make it
+executable).
+
+**Confirmed working, in order:**
+```
+-- devices after register_ep_library("QNN", "/usr/lib/libonnxruntime_providers_qnn.so") --
+  [0] ep="CPUExecutionProvider" vendor="ARM"      type=CPU
+  [0] ep="QNN"                  vendor="Qualcomm" type=NPU     <- the NPU is discovered
+INFO Creating QNN EP
+INFO Create device.
+     libQnnHtp mapped = true
+     INFERENCE OK -> [38.0, 40.0, ... 52.0]
+```
+
+**The four things that had to be right** (each was a separate wrong assumption):
+
+1. **ort >= rc.12 and the V2 device API.** `register_ep_library` + `SessionBuilder::with_devices`.
+   Appending "QNN" by name gives "QNN execution provider is not supported in this build."
+2. **The provider option key is `"QNN.backend_path"`** — the EP name from `Device::ep()` is literally
+   `"QNN"`, not `"QNNExecutionProvider"`. onnxruntime turns it into config option
+   `ep.qnn.backend_path`, visible in its "Session Options { ... config_options: {...} }" log line.
+3. **The QNN backend MUST come from the onnxruntime_qnn 2.4.0 wheel, not QAIRT 2.42.** With
+   `/usr/lib/libQnnHtp.so` (QAIRT 2.42): `QNN SetupBackend failed Unable to find a valid interface`.
+   With the wheel's: works. This applies to the **V68 skel too** — pointing
+   `ADSP_LIBRARY_PATH` at `/usr/lib/dsp` (QAIRT 2.42 skel) gives
+   `QNN_DEVICE_ERROR_INVALID_CONFIG: Invalid config values`. So the accepted-risk version skew noted
+   in `blobs/onnxruntime-qnn/README.md` was the actual blocker, exactly as suspected there.
+   Set `DSP_LIBRARY_PATH` **and** `ADSP_LIBRARY_PATH` to the dir holding the wheel's skel.
+4. **`htp_arch=68` must be passed explicitly.** Auto-detection fails with
+   `Unable to get platform info: Failed to get HTP arch`; supplying `QNN.htp_arch=68` clears it.
+
+**The one remaining blocker is the MODEL, not the stack:**
+```
+WARN QNN.backendValidateOpConfig() failed for node `MatMul3` of type `FullyConnected` with error 4000
+```
+The HTP rejects our hand-written QDQ MatMul (`example/priv/qdqmatmul.onnx`), so the EP claims no
+nodes, never loads the skel, and inference falls back to CPU (correct values, ~20-50 us, `skel=false`).
+Hand-authoring QDQ was the mistake: use onnxruntime's own quantizer
+(`onnxruntime.quantization.quantize_static`, QDQ format, per-channel int8 weights) on a real model,
+or a Qualcomm AI Hub pre-compiled context binary. Error 4000 is QNN op-config validation — most
+likely the uint8 weights with scale 1.0 / zero-point 0 are not a legal FullyConnected quantisation.
+
+**Iterate with the probe, not with firmware builds.** `ORTEX_QNN_OPTS="htp_arch=68,soc_model=..."`
+appends arbitrary `QNN.*` provider options, so option/model experiments are one sftp + one
+`:os.cmd` apart instead of a 5-minute build-flash cycle.
+
 ### Options to actually get the NPU (pick one)
 
 1. **Bump the fork's `ort` to rc.12+ and use plugin registration.** `RegisterExecutionProviderLibrary`
