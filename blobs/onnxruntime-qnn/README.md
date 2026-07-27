@@ -71,3 +71,49 @@ needed.
 proprietary — `ONNXRUNTIME_QNN_REDISTRIBUTE = NO`. Note `blobs` is in
 `package_files()` (`mix.exs`), so publishing this repo to Hex or a GitHub
 release would redistribute it. Same open question as `blobs/qairt-runtime`.
+
+## `usr/lib/onnxruntime-qnn/` — the QNN 2.4.0 runtime the EP actually needs
+
+Five files, 105 MB, from the same `onnxruntime_qnn` 2.4.0 aarch64 wheel as
+`libonnxruntime_providers_qnn.so`:
+
+| file | size | why |
+|---|---|---|
+| `libQnnHtpPrepare.so` | 85 MB | on-device graph compilation. Without it the session fails to commit: `Node ... OpType:Conv with domain:com.ms.internal.nhwc was inserted using the NHWC format as requested by QNN, but was not selected by that EP` |
+| `libQnnHtpV68Skel.so` | 10 MB | the Hexagon-side code. A mismatched version gives `QNN_DEVICE_ERROR_INVALID_CONFIG` |
+| `libQnnSystem.so` | 5.3 MB | |
+| `libQnnHtp.so` | 4.3 MB | the backend the EP loads (`backend_path`) |
+| `libQnnHtpV68Stub.so` | 0.5 MB | ARM-side stub for the skel |
+
+Checksums (sha256, first 16 hex): `53cc30587bb0f0de` libQnnHtp, `fce94a061b8152b1`
+libQnnHtpPrepare, `722426cbc5c74a2f` libQnnHtpV68Skel, `0df22195ab471374`
+libQnnHtpV68Stub, `ed5442fec388a4ad` libQnnSystem. Verified byte-identical to the
+set that was proven working on the board.
+
+### Why a subdirectory and not `/usr/lib`
+
+`qairt-runtime` already installs **QAIRT 2.42** versions of `libQnnHtp.so`,
+`libQnnSystem.so`, `libQnnHtpV68Stub.so` into `/usr/lib`, and its V68 skel into
+`/usr/lib/dsp`. Those serve `qnn-platform-validator`. They **cannot** serve
+onnxruntime's QNN EP — it fails with `Unable to find a valid interface for
+/usr/lib/libQnnHtp.so`. The two stacks need different versions of the same
+filenames, so this set lives in its own directory and neither overwrites the other.
+
+### Flat, not `dsp/`
+
+All five sit in one directory on purpose. `Example.Yolo.qnn_opts/1` points both
+`backend_path` and `DSP_LIBRARY_PATH` at this directory, which is the layout proven
+to work; it only looks for a `dsp/` subdirectory if one exists.
+
+### Do not change the global `DSP_LIBRARY_PATH`
+
+`rootfs_overlay/etc/erlinit.config` sets it to `/usr/lib/dsp` — the QAIRT skel — and
+it must stay that way, or `qnn-platform-validator` breaks. Consumers of the ORT QNN
+EP override it per session (ortex's `env.*` opts), which is the only way to give the
+two stacks different skels in one system.
+
+### Git LFS
+
+These are tracked via LFS (`.gitattributes`). A clone without `git lfs install`
+gets pointer files, and the Buildroot package will then install nothing and print
+`*** onnxruntime-qnn: no blobs in blobs/onnxruntime-qnn/usr; nothing installed.`

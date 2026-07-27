@@ -16,7 +16,7 @@
 # dir and per-package stamps off the version, so editing files inside a `local`
 # SITE without bumping leaves the stamp valid and the new blobs are silently
 # never installed.
-ONNXRUNTIME_QNN_VERSION = 1.28.0
+ONNXRUNTIME_QNN_VERSION = 1.28.0-qnn2.4.0
 ONNXRUNTIME_QNN_SITE = $(NERVES_DEFCONFIG_DIR)/blobs/onnxruntime-qnn
 ONNXRUNTIME_QNN_SITE_METHOD = local
 ONNXRUNTIME_QNN_LICENSE = MIT (onnxruntime), PROPRIETARY (QNN provider)
