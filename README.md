@@ -19,6 +19,12 @@ present and version-matched at first boot.
 | USB | dual XHCI hosts (dwc3), USB storage/HID, common USB-NIC drivers |
 | Extras | GPU/display (drm/msm + DP→HDMI bridge), Venus video, AudioReach audio - all as modules; RTC, thermal zones, cpufreq |
 
+> **Working on this board? Read [`docs/BOARD_QUIRKS.md`](docs/BOARD_QUIRKS.md) first.** It is the
+> accumulated, measured practice for this hardware: the build/flash/OTA rules, the seven things that
+> each individually make the NPU work (and the silent CPU fallback you get otherwise), the
+> spin-wait/governor interaction worth 40% of NPU throughput, Nx/EXLA traps that cost 9 s per frame,
+> and a measurement-discipline list written from the conclusions that turned out to be wrong.
+
 > Status: boot chain + A/B rollback are QEMU-validated. On-board
 > validation (NPU `fastrpc_test -a v68`, Ethernet/WiFi/USB) is pending
 > bench time - see `BRINGUP.md`. All firmware blobs are vendored; no

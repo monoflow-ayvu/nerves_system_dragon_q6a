@@ -1,5 +1,9 @@
 # Working notes — porting to parity with the proven Yocto system
 
+> **The durable knowledge from this effort now lives in [`docs/BOARD_QUIRKS.md`](docs/BOARD_QUIRKS.md).**
+> These notes are the chronological working log - useful for *why* a decision was made and what was
+> tried and rejected. BOARD_QUIRKS is what you read when starting a new task cold.
+
 ## Task
 
 Bring this Buildroot/Nerves system to parity with `../radxa-q6a-yocto` (Yocto, **proven on real
