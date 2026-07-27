@@ -12,6 +12,15 @@ BR2_TOOLCHAIN_EXTERNAL_CXX=y
 BR2_TOOLCHAIN_EXTERNAL_FORTRAN=y
 BR2_TOOLCHAIN_EXTERNAL_OPENMP=y
 BR2_TAR_OPTIONS="--no-same-owner"
+# ccache for both host and target compilation. The dir is inside the
+# bind-mounted checkout (/nerves/env/<app> is the repo dir in the Docker
+# build runner) because the container's $HOME is ephemeral and the runner
+# only passes UID/GID/TERM through — an exported BR2_CCACHE_DIR on the CI
+# host never reaches the build. ci.yml caches ./.ccache with actions/cache,
+# whose post-job save runs even when the build fails.
+BR2_CCACHE=y
+BR2_CCACHE_DIR="/nerves/env/nerves_system_dragon_q6a/.ccache"
+BR2_CCACHE_INITIAL_SETUP="--max-size=4G"
 BR2_BACKUP_SITE="https://dl.nerves-project.org"
 BR2_ENABLE_DEBUG=y
 BR2_GLOBAL_PATCH_DIR="${BR2_EXTERNAL_NERVES_PATH}/patches ${NERVES_DEFCONFIG_DIR}/patches"

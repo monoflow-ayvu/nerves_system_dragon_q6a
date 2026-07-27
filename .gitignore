@@ -6,6 +6,9 @@ deps/
 *.img
 # `mix nerves.artifact` drops the packaged system tarball in the repo root.
 nerves_system_dragon_q6a-portable-*.tar.gz
+# buildroot ccache lives in the checkout so the Docker build container can
+# reach it (see nerves_defconfig BR2_CCACHE_DIR); cached by ci.yml.
+.ccache/
 build*.log
 erl_crash.dump
 test/work/

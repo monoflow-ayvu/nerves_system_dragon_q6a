@@ -52,6 +52,23 @@ jobs:
       - run: mkdir -p /home/runner/.ssh
       - uses: actions/checkout@v4
       - uses: gridpoint-com/actions-nerves-system@v1
+      # ccache is wired in nerves_defconfig (BR2_CCACHE_DIR points into the
+      # bind-mounted checkout) because the action's BR2_CCACHE* env exports
+      # never reach the Docker build container. Disable the action's ccache
+      # handling (inert exports + a restore of ~/.buildroot-ccache that
+      # nothing writes) and cache the real dir ourselves. actions/cache
+      # saves in the post-job phase, which also runs on failure — a failed
+      # build still leaves a warm cache for the retry.
+      - name: Cache buildroot ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          # mix.lock pins the nerves_toolchain and nerves_system_br versions;
+          # a compiler change must start a fresh cache (buildroot does not
+          # invalidate ccache on compiler changes itself). No restore-keys:
+          # falling back to a cache built by a different compiler is exactly
+          # what the key is meant to prevent.
+          key: br-ccache-${{ hashFiles('mix.lock') }}
       # The Nerves Docker build_runner (mix.exs) pulls fermuch/nerves-dragon-q6a-builder
       # from Docker Hub (public), same as nerves_system_sg2002 does with its image.
       - name: Build nerves_system
@@ -62,6 +79,7 @@ jobs:
           nerves-bootstrap-version: ${{ env.NERVES_BOOTSTRAP_VERSION }}
           # Same 16 MiB hex cap vs 47 MB blobs/ as in get-br-dependencies.
           hex-validate: false
+          enable-ccache: false
 
   qemu-smoke:
     needs: [build-system]
