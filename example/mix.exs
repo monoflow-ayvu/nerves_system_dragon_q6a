@@ -77,12 +77,44 @@ defmodule Example.MixProject do
     ]
   end
 
+  # Apps we depend on that ship a NIF. A missing .so does not fail the build - it
+  # fails at BOOT, with on_load_function_failed taking the whole VM down before
+  # anything can report it. That happened: the ortex NIF was gitignored, its
+  # priv/native was removed, `mix compile` did not notice the deleted artifact
+  # (Mix's staleness check only looks at sources), and the resulting firmware
+  # bricked the slot on boot. Only the A/B rollback saved the board. Cheap to
+  # check here, expensive to debug there.
+  @nif_apps [:ortex, :stb_image, :exla]
+
+  defp verify_nifs(release) do
+    missing =
+      for app <- @nif_apps,
+          path = Map.get(release.applications, app) |> then(&(&1 && &1[:path])),
+          path != nil,
+          Path.wildcard(Path.join([path, "priv", "**", "*.so"])) == [] do
+        app
+      end
+
+    if missing != [] do
+      Mix.raise("""
+      Release is missing NIF shared objects for: #{inspect(missing)}
+
+      This firmware would fail at boot with on_load_function_failed and roll back.
+      Rebuild the NIF(s) with, e.g.:
+
+          mix deps.compile #{Enum.join(missing, " ")} --force
+      """)
+    end
+
+    release
+  end
+
   defp release do
     [
       overwrite: true,
       cookie: "#{@app}_cookie",
       include_erts: &Nerves.Release.erts/0,
-      steps: [&Nerves.Release.init/1, :assemble],
+      steps: [&Nerves.Release.init/1, :assemble, &verify_nifs/1],
       strip_beams: Mix.env() == :prod or [keep: ["Docs"]]
     ]
   end

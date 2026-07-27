@@ -792,6 +792,64 @@ reading and let it saturate.
 (Regression slopes on these sensors are misleading over short windows: the zones quantise to ~0.4-0.8
 degC steps, which manufactured a spurious "+6 degC/h" on cpu0 over 8 samples that were in fact flat.)
 
+### The decode was 1143 ms — 30x the inference. Nx.backend_transfer/1 defaults to BinaryBackend.
+
+`detect/2` end-to-end was **1179 ms** on a prepared frame while `bench/2` reported 34 ms, because
+bench only ever timed `Ortex.run`. The decode had never been measured. Stage timings on the
+8400x84 head:
+
+| op | BinaryBackend | EXLA eager | fused `defn` |
+|---|---|---|---|
+| squeeze+transpose | 246 ms | 2.9 ms | |
+| reduce_max over 80 classes | 265 ms | 0.8 ms | |
+| argmax over 80 classes | 289 ms | 1.7 ms | |
+| all three together | ~800 ms | ~5.4 ms | **2.8 ms** |
+
+**Root cause: `Nx.backend_transfer(tensor)` defaults to `Nx.BinaryBackend`, not
+`Nx.default_backend()`.** So every decode ran element-by-element with EXLA installed and configured.
+Same trap as the 9.0 s preprocessing, in a different function - on this target any Nx elementwise or
+transpose work on an image-sized tensor must be checked for which backend it actually landed on.
+
+Fixed by transferring to `Nx.default_backend()` and moving boxes/scores/ids into one `defnp head/2`
+(`nc` as a defn option so XLA compiles one kernel per class count). Threshold and NMS stay on the
+BEAM but now only touch the 8400-element score vector and the ~49 survivors.
+
+| | before | after |
+|---|---|---|
+| detect, prepared frame | 1179 ms | **58 ms** |
+| of which decode+NMS | 1143 ms | **17 ms** |
+| full pipeline incl JPEG decode | 0.9 fps | **11.5 fps** |
+
+Detections byte-identical. Note the honest framing for any future benchmark: `bench/2`'s ~29/48 fps
+is **model throughput**, not pipeline throughput. End to end from a JPEG is 11.5 fps single-threaded.
+
+### Near-brick: a missing NIF fails at BOOT, and `mix compile` will not notice
+
+Flashing the above first produced a slot that crashed on boot:
+
+```
+Kernel pid terminated (application_controller)
+{on_load_function_failed, 'Elixir.Ortex.Native',
+ {error, {load_failed, "... priv/native/ortex.so: cannot open shared object file"}}}
+```
+
+The A/B rollback did its job - the board came back on the previous slot, which is the only reason this
+was a diagnosis and not a brick. Cause: the ortex NIF had been gitignored and `priv/native/` removed,
+and **Mix's staleness check only looks at sources, so a deleted build artifact does not trigger a
+rebuild.** `mix firmware` packaged a release with no NIF and reported success.
+
+Two things now guard this:
+
+* `mix deps.compile ortex --force` recreates `priv/native/ortex.so` - do this after any `git clean` or
+  gitignore change in the fork.
+* `example/mix.exs` gained a `verify_nifs/1` release step over `@nif_apps [:ortex, :stb_image, :exla]`
+  that raises if any of them assembled without a `.so`. **Verified by hiding `ortex.so` and confirming
+  the build exits 1** with "Release is missing NIF shared objects for: [:ortex]" - an untested guard
+  would have been false confidence.
+
+Diagnosis route worth remembering: `/root` is shared between A and B, so the failed slot's
+`erl_crash.dump` survives the rollback and its `Slogan:` line names the cause exactly.
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):

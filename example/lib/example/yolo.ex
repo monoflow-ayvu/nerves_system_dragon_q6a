@@ -176,7 +176,12 @@ defmodule Example.Yolo do
       {inf_us, out} = :timer.tc(fn -> Ortex.run(session, {input}) end)
 
       {out} = out
-      raw = Nx.backend_transfer(out)
+      # backend_transfer/1 defaults to Nx.BinaryBackend - NOT Nx.default_backend().
+      # Getting that wrong made every decode run element-by-element even with EXLA
+      # installed: transpose 246 ms, reduce_max 265 ms, argmax 289 ms on the
+      # 8400x84 head, i.e. ~800 ms of decode against 36 ms of inference. On EXLA
+      # the same three ops are 2.9/0.8/1.7 ms, and fused into one defn, 2.8 ms.
+      raw = Nx.backend_transfer(out, Nx.default_backend())
 
       classes = Keyword.get(opts, :classes, @coco)
 
@@ -560,19 +565,28 @@ defmodule Example.Yolo do
 
   # Output is [1, 4 + nc, anchors]: rows 0..3 are cx, cy, w, h in input-space
   # pixels, the rest are per-class scores (already sigmoid'd by the export).
-  defp decode(raw, conf) do
+  # Boxes, best-class score and class id for every anchor, as ONE compiled kernel.
+  # `nc` is a defn option so XLA compiles one kernel per class count and reuses it.
+  defnp head(raw, opts \\ []) do
+    opts = keyword!(opts, [:nc])
     t = raw |> Nx.squeeze(axes: [0]) |> Nx.transpose(axes: [1, 0])
-    {_anchors, attrs} = Nx.shape(t)
-    nc = attrs - 4
+    cls = Nx.slice_along_axis(t, 4, opts[:nc], axis: 1)
 
-    cls = Nx.slice_along_axis(t, 4, nc, axis: 1)
+    {
+      Nx.slice_along_axis(t, 0, 4, axis: 1),
+      Nx.reduce_max(cls, axes: [1]),
+      Nx.argmax(cls, axis: 1)
+    }
+  end
 
-    # Threshold on the per-anchor best class score in Nx, then pull only the
-    # surviving rows across to the BEAM. Moving all 8400x84 values would cost
-    # more than the inference itself.
+  defp decode(raw, conf) do
+    {_batch, attrs, _anchors} = Nx.shape(raw)
+    {boxes_t, scores_t, ids_t} = head(raw, nc: attrs - 4)
+
+    # Threshold on the BEAM, but only over the 8400 per-anchor scores - the one
+    # small vector in the whole head. Everything wide stays in the kernel above.
     kept =
-      cls
-      |> Nx.reduce_max(axes: [1])
+      scores_t
       |> Nx.to_flat_list()
       |> Enum.with_index()
       |> Enum.filter(fn {score, _anchor} -> score >= conf end)
@@ -583,13 +597,12 @@ defmodule Example.Yolo do
       idx = Nx.tensor(Enum.map(kept, fn {_score, anchor} -> anchor end))
 
       boxes =
-        t
+        boxes_t
         |> Nx.take(idx, axis: 0)
-        |> Nx.slice_along_axis(0, 4, axis: 1)
         |> Nx.to_flat_list()
         |> Enum.chunk_every(4)
 
-      ids = cls |> Nx.argmax(axis: 1) |> Nx.take(idx) |> Nx.to_flat_list()
+      ids = ids_t |> Nx.take(idx) |> Nx.to_flat_list()
 
       [boxes, ids, Enum.map(kept, fn {score, _anchor} -> score end)]
       |> Enum.zip_with(fn [[cx, cy, w, h], id, score] ->
