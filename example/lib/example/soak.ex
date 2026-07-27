@@ -33,6 +33,9 @@ defmodule Example.Soak do
       `type` - including `nspss0-thermal`/`nspss1-thermal`, which are the Hexagon
       NSP subsystem the NPU runs on, and `msm-skin-thermal`, the closest thing to
       a case temperature.
+    * `workers` - how many worker processes, each with its OWN session. More than
+      one is pipelining, not parallelism across devices; see `spawn_worker/2`.
+    * `model` - which model directory was benchmarked, so a row is self-describing.
     * `governor` - the cpufreq governor in effect. `performance` is set on start
       and the previous value restored on stop; see `set_governor/1` for why that is
       load-bearing rather than cosmetic.
@@ -188,8 +191,22 @@ defmodule Example.Soak do
       ensure_header(zones, cooling)
       previous_governor = set_governor(Keyword.get(opts, :governor, "performance"))
 
-      workers =
-        for _ <- 1..Keyword.get(opts, :workers, 1), do: spawn_worker(session.ortex, frame.input)
+      # One SESSION per worker, not one session shared by N workers. Ortex.run holds
+      # a Mutex<Session>, so N workers on one session just queue: measured 32.5 fps
+      # with p50 latency doubled, against 46.8 fps for two independent sessions.
+      # Note this is pipelining, not parallel devices - there is one NPU. Roughly
+      # 21 ms of an inference is serial DSP compute and ~12 ms is ARM-side
+      # marshalling and RPC, so a second in-flight request overlaps its ARM phase
+      # with the first's DSP phase. The DSP saturates at ~47 fps; a third and
+      # fourth session add latency and nothing else.
+      extra_sessions =
+        for _ <- 2..Keyword.get(opts, :workers, 1)//1 do
+          {:ok, s} = Example.Yolo.load(opts)
+          s
+        end
+
+      sessions = [session | extra_sessions]
+      workers = for s <- sessions, do: spawn_worker(s.ortex, frame.input)
 
       Logger.info(
         "Soak started: #{image}, #{length(workers)} worker(s), logging to #{@csv} every minute"
@@ -209,6 +226,7 @@ defmodule Example.Soak do
          cooling: cooling,
          image: image,
          session: session,
+         sessions: sessions,
          frame: frame,
          workers: workers,
          previous_governor: previous_governor,
@@ -245,6 +263,8 @@ defmodule Example.Soak do
   def handle_info({:EXIT, pid, reason}, state) do
     if pid in Map.get(state, :workers, []) do
       Logger.warning("Soak worker exited (#{inspect(reason)}); restarting it")
+      # Restart on the first session; a lost worker is rare and this keeps the
+      # replacement simple rather than tracking worker-to-session pairs.
       worker = spawn_worker(state.session.ortex, state.frame.input)
 
       {:noreply,
@@ -273,6 +293,8 @@ defmodule Example.Soak do
     {:reply,
      %{
        image: state.image,
+       model: state.session.model,
+       workers_configured: length(state.workers),
        started: state.started,
        uptime_s: div(System.monotonic_time(:millisecond) - state.started_mono, 1000),
        workers: length(state.workers),
@@ -376,7 +398,9 @@ defmodule Example.Soak do
         acc.min_us || 0,
         acc.max_us || 0,
         acc.errors,
-        read_trim("/sys/devices/system/cpu/cpufreq/policy0/scaling_governor") || ""
+        read_trim("/sys/devices/system/cpu/cpufreq/policy0/scaling_governor") || "",
+        length(state.workers),
+        Path.basename(Path.dirname(state.session.model))
       ] ++
         Enum.map(state.zones, fn {_name, path} -> read_int(path) end) ++
         Enum.map(cpufreq_paths(), &read_int/1) ++
@@ -401,7 +425,7 @@ defmodule Example.Soak do
 
     header =
       Enum.join(
-        ~w(run_started_at sampled_at uptime_s sys_uptime_s elapsed_s iters fps mean_us min_us max_us errors governor) ++
+        ~w(run_started_at sampled_at uptime_s sys_uptime_s elapsed_s iters fps mean_us min_us max_us errors governor workers model) ++
           Enum.map(zones, fn {name, _} -> name end) ++
           Enum.map(cpufreq_paths(), &("cpufreq_" <> (&1 |> Path.split() |> Enum.at(-2)))) ++
           Enum.map(cooling, fn {name, _} -> "cool_" <> name end),
