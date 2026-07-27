@@ -640,6 +640,46 @@ drops), **0 soak-process restarts** (`uptime_s` never resets), every `elapsed_s`
 RSS flat at 830 MB across the whole night (the earlier "1.1 GB/night leak" projection was my own
 sampling bug - a `for` comprehension that never rebound the previous reading; there is no leak).
 
+### NPU memory limits, and switching between two models (both measured 2026-07-27)
+
+**There is no single "NPU memory" number — there are three different ceilings.**
+
+| limit | size | what it bounds |
+|---|---|---|
+| **VTCM** (on-die scratchpad in the NSP) | **2 MB usable** | the graph's working set. `vtcm_mb=2` works; **`vtcm_mb=4`, `8`, `16` all fail** with `Failed to create Qnn graph` / `Failed to initialize qnn_model_wrapper`. Default behaviour matches 2 MB (spill 42 vs 44 MB), so the default is already the ceiling. |
+| **DDR reachable over FastRPC** | free system RAM (~10.4 GB here) | weights + activations. Not a fixed pool: model memory is dma-heap/ION allocated and mapped to the DSP through the SMMU. Measured **+132 MB RSS per loaded model** (yolo11s, 37 MB of weights on disk). |
+| **cdsp firmware carveout** | **30 MB** (`cdsp@8e000000` in the live DT; adsp is 40 MB, `adsp-rpc-remote-heap` 8 MB) | the DSP's own firmware image. Not available for models - do not confuse this with a model budget. |
+
+VTCM being only 2 MB is why yolo11s spills so hard: `spill_bytes=44 MB`, `fill_bytes=52 MB` per graph
+prepare. Forcing `vtcm_mb=1` doubles the spill to 95 MB and costs ~40% throughput (37.4 vs 26.8
+ms/iter), which is a neat confirmation that VTCM residency is the dominant performance factor here -
+and that a model shaped to fit 2 MB tiles would do much better than one that doesn't.
+
+**Two models, switching: it is free. No reload, no measurable penalty.** Both sessions stay resident
+on the DSP simultaneously; "switching" is just calling `Ortex.run/2` on the other session.
+Measured under the `performance` governor, 25 solo runs each then 50 alternating:
+
+```
+              solo    alternating   penalty
+det           35ms         35ms       0ms
+pose          35ms         35ms       0ms
+post-switch runs, det: 35 34 37 35 34 36 ms   (no spike on any first-run-after-switch)
+```
+
+Cost of holding both: RSS 817 -> 949 (det) -> 1084 MB (pose), i.e. ~132-135 MB each, and one-off load
+times of 3.3 s and 4.4 s (HTP graph compilation). So the pattern for a multi-model pipeline is: load
+every model once at startup, keep the handles, and dispatch per frame. With ~10 GB free that is dozens
+of models, and the only real cost is startup time.
+
+Two gotchas found while measuring this, worth not re-deriving:
+
+* `Example.Soak.disable/0` **restores the previous cpufreq governor**, which is correct but silently
+  invalidates any benchmark run afterwards - the first pass of this measurement read 61 ms instead of
+  35 ms purely because the governor had gone back to `schedutil`. Set it explicitly when measuring.
+* `trace_path` / `ORTEX_TRACE` only takes effect on the **first** session in an OS process
+  (`init_tracing` is behind a `OnceLock`). Once the soak has created a session, tracing can no longer
+  be enabled without a reboot. Worth changing if remote diagnosis matters.
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):
