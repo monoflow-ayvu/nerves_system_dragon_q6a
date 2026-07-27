@@ -850,6 +850,55 @@ Two things now guard this:
 Diagnosis route worth remembering: `/root` is shared between A and B, so the failed slot's
 `erl_crash.dump` survives the rollback and its `Slogan:` line names the cause exactly.
 
+### Pose decoding is CHEAPER than detection decoding — the expected asymmetry does not exist
+
+`Example.Yolo.detect_pose/2` decodes the Ultralytics pose head (`[1, 5+3K, A]`: 4 box, 1 person score,
+K keypoints of x/y/score) and returns people with 17 named COCO joints in original-image coordinates.
+Verified on zidane.jpg: 2 people, box `{145,203,1112,710}` against the detection model's
+`{126,204,1107,711}` for the same person, and anatomically consistent joints (nose above eyes,
+shoulders below, left/right ordering stable).
+
+The prediction was that pose would be slower on the CPU side and would therefore lag behind detection.
+Measured warm, median of 12, same prepared frame:
+
+| | inference | decode | end-to-end |
+|---|---|---|---|
+| detection (`[1,84,8400]`) | 36 ms | **17 ms** | 53 ms (18.9 fps) |
+| pose (`[1,56,8400]`) | 37 ms | **13 ms** | 52 ms (19.2 fps) |
+
+**Pose is cheaper, and the reason is structural.** Detection must reduce over 80 class scores for every
+one of 8400 anchors *twice* (`reduce_max` for the score, `argmax` for the class id). Pose has a single
+person score - no argmax at all - and its extra work, the 17 keypoints, is only ever touched for the
+handful of anchors that survive the confidence threshold, never for all 8400. More output channels does
+not mean more decode work; what matters is how much of the wide tensor you have to reduce over.
+
+So a two-model soak will *not* show pose lagging. Both cost ~50 ms end-to-end and would split the
+DSP's ~47 inf/s budget evenly, exactly as the raw-inference test showed.
+
+**First call is 218 ms, steady state 13 ms** - that is XLA compiling the kernel, and it is why the
+first measurement of anything here has to be discarded.
+
+How much is in Nx: box decode (cxcywh -> xyxy), letterbox inversion, clamping, keypoint reshape and
+rescale all happen in ONE `defnp pose_head/4` over all 8400 anchors at once. `scale`/`pad`/`size` are
+passed as **tensors, not numbers** - as numbers, defn bakes them in as constants and XLA compiles a
+fresh kernel per image aspect ratio. Threshold and NMS stay on the BEAM on purpose: both need a kernel
+whose shape depends on the survivor count, so XLA would recompile per frame as that count moved, which
+costs far more than the few ms they take on ~50 rows.
+
+### ortex now comes from git at a pinned ref, not a sibling directory
+
+`{:ortex, git: "git@github.com:monoflow-ayvu/ortex.git", ref: @ortex_ref, override: true}` with
+`@ortex_ref "313c46777fc4656942fe94e0e57d7be08b7af738"` (main @ 2026-07-27). Verified that ref contains
+all the QNN work (qnn_opts, intra_op_spinning, TRACE_FILE, register_qnn_library) and that the NIF
+cross-compiles cleanly from a fresh clone - which matters, because the repo gitignores
+`priv/native`, so the clone has no prebuilt `.so` and must build one.
+
+**The repo is currently PRIVATE** - `api.github.com/repos/monoflow-ayvu/ortex` 404s unauthenticated
+while SSH works. So the relative-path dependency is gone and the project can be cloned anywhere, but
+an outside clone will still fail on *auth* rather than on a missing sibling directory. Making the repo
+public and switching to `github: "monoflow-ayvu/ortex"` is a one-line change; the SSH URL is used for
+now because the https form would prompt for credentials on this machine.
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):

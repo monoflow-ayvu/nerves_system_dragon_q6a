@@ -14,6 +14,9 @@ defmodule Example.MixProject do
   @version "0.1.0"
   @all_targets [:dragon_q6a]
 
+  # github.com/monoflow-ayvu/ortex main @ 2026-07-27
+  @ortex_ref "313c46777fc4656942fe94e0e57d7be08b7af738"
+
   def project do
     [
       app: @app,
@@ -50,10 +53,23 @@ defmodule Example.MixProject do
       {:nerves_pack, "~> 0.7"},
       {:nerves_motd, "~> 0.1"},
 
-      # ONNX inference on the Hexagon NPU. Local fork of elixir-nx/ortex that
-      # adds the :qnn execution provider and switches `ort` to load-dynamic so
-      # it uses the system libonnxruntime instead of downloading a host-arch one.
-      {:ortex, path: "../../ortex", override: true},
+      # ONNX inference on the Hexagon NPU. Our fork of elixir-nx/ortex: adds the
+      # :qnn execution provider, thread-pool/tracing controls, and switches `ort`
+      # to load-dynamic so it uses the system libonnxruntime instead of
+      # downloading a host-arch one.
+      #
+      # Pinned to an explicit ref rather than a branch so a build is reproducible,
+      # and fetched from git rather than a relative path so this project can be
+      # cloned anywhere without a required sibling checkout.
+      #
+      # The SSH URL is deliberate: monoflow-ayvu/ortex is currently PRIVATE (the
+      # GitHub API 404s unauthenticated), so the https form would prompt for
+      # credentials. If the repo is made public, this becomes
+      #     {:ortex, github: "monoflow-ayvu/ortex", ref: @ortex_ref, override: true}
+      {:ortex,
+       git: "git@github.com:monoflow-ayvu/ortex.git",
+       ref: @ortex_ref,
+       override: true},
       {:nx, "~> 0.6"},
 
       # XLA-backed Nx. Needed because BinaryBackend evaluates elementwise and

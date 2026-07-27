@@ -109,6 +109,10 @@ defmodule Example.Yolo do
            cell_phone microwave oven toaster sink refrigerator book clock vase scissors
            teddy_bear hair_drier toothbrush)
 
+  @keypoints ~w(nose left_eye right_eye left_ear right_ear left_shoulder right_shoulder
+                left_elbow right_elbow left_wrist right_wrist left_hip right_hip
+                left_knee right_knee left_ankle right_ankle)
+
   @doc "The 80 COCO class names, in model order."
   def coco_classes, do: @coco
 
@@ -208,6 +212,60 @@ defmodule Example.Yolo do
   rescue
     e -> {:error, Exception.message(e)}
   end
+
+  @doc """
+  Detect people and their 17 COCO keypoints, for a `-pose` export.
+
+      iex> {:ok, s} = Example.Yolo.load(model: "/root/pose/model.onnx")
+      iex> {:ok, r} = Example.Yolo.detect_pose("/root/zidane.jpg", session: s)
+      iex> hd(r.people)
+      %{
+        score: 0.91,
+        box: {126, 204, 1107, 711},
+        keypoints: [%{name: "nose", x: 421, y: 254, score: 0.98}, ...]
+      }
+
+  Expects the Ultralytics pose head: output `[1, 5 + 3*K, A]` - 4 box values, one
+  person score, then K keypoints of (x, y, score). K is read from the tensor, so
+  this is not hard-coded to 17; only `keypoint_names/0` assumes COCO ordering.
+
+  Options are as `detect/2`, plus `:min_keypoint_score` (default `0.5`) below which
+  a joint is reported with `visible: false` - occluded joints still carry a
+  predicted position and it is up to the caller whether to trust it.
+  """
+  def detect_pose(source, opts \\ []) do
+    with {:ok, %{ortex: session, side: side, model: model_path}} <- reuse_or_load(opts),
+         {:ok, frame} <- as_prepared(source, side, opts) do
+      {inf_us, {out}} = :timer.tc(fn -> Ortex.run(session, {frame.input}) end)
+      raw = Nx.backend_transfer(out, Nx.default_backend())
+
+      {dec_us, people} =
+        :timer.tc(fn ->
+          raw
+          |> decode_pose(frame.geom, Keyword.get(opts, :conf, 0.25))
+          |> nms(Keyword.get(opts, :iou, 0.45))
+          |> Enum.take(Keyword.get(opts, :max_detections, 100))
+          |> Enum.map(&finish_person(&1, Keyword.get(opts, :min_keypoint_score, 0.5)))
+        end)
+
+      {:ok,
+       %{
+         people: people,
+         count: length(people),
+         inference_us: inf_us,
+         decode_us: dec_us,
+         preprocess_us: frame.preprocess_us,
+         model: model_path,
+         output_shape: Nx.shape(raw),
+         image_size: frame.image_size
+       }}
+    end
+  rescue
+    e -> {:error, Exception.message(e)}
+  end
+
+  @doc "The 17 COCO keypoint names, in model order."
+  def keypoint_names, do: @keypoints
 
   @doc """
   Run the model on an image and return the raw output tensor, undecoded.
@@ -565,6 +623,116 @@ defmodule Example.Yolo do
 
   # Output is [1, 4 + nc, anchors]: rows 0..3 are cx, cy, w, h in input-space
   # pixels, the rest are per-class scores (already sigmoid'd by the export).
+  # The whole pose head as ONE compiled kernel, over all anchors at once: box
+  # decode, letterbox inversion, clamping, and keypoint reshaping and rescaling.
+  #
+  # `scale`/`pad`/`size` come in as TENSORS, not numbers. As numbers, defn would
+  # bake them in as constants and XLA would compile a fresh kernel for every
+  # distinct image aspect ratio; as tensors they are runtime arguments and the
+  # kernel compiles once for a given output shape.
+  defnp pose_head(raw, scale, pad, size) do
+    t = raw |> Nx.squeeze(axes: [0]) |> Nx.transpose(axes: [1, 0])
+    anchors = Nx.axis_size(t, 0)
+    n_kpt = div(Nx.axis_size(t, 1) - 5, 3)
+
+    pad_x = pad[0]
+    pad_y = pad[1]
+    w0 = size[0]
+    h0 = size[1]
+
+    cx = Nx.slice_along_axis(t, 0, 1, axis: 1)
+    cy = Nx.slice_along_axis(t, 1, 1, axis: 1)
+    w = Nx.slice_along_axis(t, 2, 1, axis: 1)
+    h = Nx.slice_along_axis(t, 3, 1, axis: 1)
+
+    # cx,cy,w,h in letterboxed space -> x1,y1,x2,y2 in the original image
+    x1 = Nx.clip((cx - w / 2 - pad_x) / scale, 0, w0)
+    y1 = Nx.clip((cy - h / 2 - pad_y) / scale, 0, h0)
+    x2 = Nx.clip((cx + w / 2 - pad_x) / scale, 0, w0)
+    y2 = Nx.clip((cy + h / 2 - pad_y) / scale, 0, h0)
+
+    scores = t |> Nx.slice_along_axis(4, 1, axis: 1) |> Nx.squeeze(axes: [1])
+
+    kpt =
+      t
+      |> Nx.slice_along_axis(5, n_kpt * 3, axis: 1)
+      |> Nx.reshape({anchors, n_kpt, 3})
+
+    # Keypoints are NOT clamped: a joint predicted just outside the frame is
+    # information, and clamping would silently pile them onto the border.
+    kx = (Nx.slice_along_axis(kpt, 0, 1, axis: 2) - pad_x) / scale
+    ky = (Nx.slice_along_axis(kpt, 1, 1, axis: 2) - pad_y) / scale
+    kc = Nx.slice_along_axis(kpt, 2, 1, axis: 2)
+
+    {
+      Nx.concatenate([x1, y1, x2, y2], axis: 1),
+      scores,
+      Nx.concatenate([kx, ky, kc], axis: 2)
+    }
+  end
+
+  # Threshold and NMS stay on the BEAM deliberately. Both would need a kernel whose
+  # shape depends on how many anchors survived, so XLA would recompile per frame as
+  # the count moved - far more than the few ms they cost here on ~50 survivors.
+  defp decode_pose(raw, geom, conf) do
+    %{scale: scale, pad_x: pad_x, pad_y: pad_y, w0: w0, h0: h0} = geom
+
+    {boxes_t, scores_t, kpts_t} =
+      pose_head(
+        raw,
+        Nx.tensor(scale, type: :f32),
+        Nx.tensor([pad_x, pad_y], type: :f32),
+        Nx.tensor([w0, h0], type: :f32)
+      )
+
+    kept =
+      scores_t
+      |> Nx.to_flat_list()
+      |> Enum.with_index()
+      |> Enum.filter(fn {score, _anchor} -> score >= conf end)
+
+    if kept == [] do
+      []
+    else
+      idx = Nx.tensor(Enum.map(kept, fn {_score, anchor} -> anchor end))
+      boxes = boxes_t |> Nx.take(idx, axis: 0) |> Nx.to_flat_list() |> Enum.chunk_every(4)
+
+      kpts =
+        kpts_t
+        |> Nx.take(idx, axis: 0)
+        |> Nx.to_flat_list()
+        |> Enum.chunk_every(3)
+        |> Enum.chunk_every(Nx.axis_size(kpts_t, 1))
+
+      [boxes, kpts, Enum.map(kept, fn {score, _anchor} -> score end)]
+      |> Enum.zip_with(fn [[x1, y1, x2, y2], joints, score] ->
+        # class_id 0 keeps these compatible with nms/2, which groups by class.
+        %{class_id: 0, score: score, x1: x1, y1: y1, x2: x2, y2: y2, joints: joints}
+      end)
+      |> Enum.sort_by(& &1.score, :desc)
+    end
+  end
+
+  defp finish_person(person, min_kpt_score) do
+    keypoints =
+      [@keypoints, person.joints]
+      |> Enum.zip_with(fn [name, [x, y, score]] ->
+        %{
+          name: name,
+          x: round(x),
+          y: round(y),
+          score: Float.round(score * 1.0, 3),
+          visible: score >= min_kpt_score
+        }
+      end)
+
+    %{
+      score: Float.round(person.score * 1.0, 3),
+      box: {round(person.x1), round(person.y1), round(person.x2), round(person.y2)},
+      keypoints: keypoints
+    }
+  end
+
   # Boxes, best-class score and class id for every anchor, as ONE compiled kernel.
   # `nc` is a defn option so XLA compiles one kernel per class count and reuses it.
   defnp head(raw, opts \\ []) do
