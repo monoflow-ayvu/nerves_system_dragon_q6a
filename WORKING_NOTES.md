@@ -567,6 +567,44 @@ cargo's own environment in `shell.nix` (`CARGO_BUILD_TARGET` plus the per-target
 host-side `CC_x86_64_*` overrides), so both Mix paths agree regardless of config visibility.
 Regression-tested by touching `lib/ortex.ex` and running plain `mix compile`.
 
+### Overnight soak in progress — started 2026-07-27 ~01:50 UTC
+
+`Example.Soak` runs inference back-to-back forever and appends one row per minute to
+**`/data/soak.csv`** (51 columns): fps / mean / min / max / errors for that interval only, all 34
+thermal zones in millidegrees, 3 cpufreq policies, and the 4 cooling devices' `cur_state`.
+Read it with `Example.Soak.summary()`; stop with `Example.Soak.disable()`.
+
+It survives reboots by design: `enable/1` writes `/data/soak.enabled` and `Example.Application`
+restarts the soak at boot whenever that file exists. Already proved itself — the device rebooted
+during setup and the log shows `Soak flag present; resuming soak`.
+
+Three things that had to be got right, each of which had already bitten once:
+
+* **Start it under the application supervisor, not `start_link` from the IEx session.** Linking to an
+  SSH session means closing the terminal ends the overnight run.
+* **`:transient`, and stop via `Supervisor.terminate_child`.** A `:permanent` child would be restarted
+  by the supervisor immediately after `disable/0` stopped it.
+* **Rows are written with `:sync`.** An unclean reset cost exactly the header and the first data row
+  from an unflushed page cache; `ensure_header` now also rotates a headerless file aside rather than
+  appending a header mid-file.
+
+`init/1` never fails hard — it retries setup every 15 s — because the CDSP can still be establishing
+its FastRPC session at boot, and a stopping child would put the whole application into a restart loop
+unattended.
+
+**Already visible in the first two samples, and it is the headline for tomorrow: the board throttles
+hard and fast.** At t=60 s cpu0 88.4 degC, nspss0 83.3, ddr 84.9, skin 73.3, cooling state 6/9 on all
+three cpufreq domains, 24.0 fps. At t=120 s: nspss0 84.1, skin 74.2, cooling state **7/9**,
+22.65 fps. Idle was 37-41 degC. So the overnight numbers will mostly describe the *throttled* steady
+state — which is the useful number for a real deployment, but it is not the 27-31 fps that
+`bench/2` reports in a short burst.
+
+Worth trying next, and probably a real win: most of that heat is ARM, not NPU. ONNX Runtime's thread
+pool **spin-waits** while the HTP computes (~6 cores at 100% for a 32 ms inference, see the
+CPU%-of-wall note above), so the cores are burning power doing nothing and then throttling the whole
+package. Capping the EP's intra-op threads should cut CPU temperature and may well *raise* sustained
+NPU throughput by keeping the die out of thermal limit.
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):

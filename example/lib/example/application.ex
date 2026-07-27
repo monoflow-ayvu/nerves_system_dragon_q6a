@@ -9,7 +9,18 @@ defmodule Example.Application do
     IO.puts("\n=== EXAMPLE APP UP: Dragon Q6A Nerves runtime is alive ===\n")
     Logger.info("Example.Application started on #{target()}")
 
-    children = []
+    # Resume an overnight soak by itself after a reboot. Without this, a watchdog
+    # reset or a power blip at 3am costs the rest of the night's data.
+    children =
+      case Example.Soak.enabled?() do
+        {true, soak_opts} ->
+          Logger.info("Soak flag present; resuming soak with #{inspect(soak_opts)}")
+          [{Example.Soak, soak_opts}]
+
+        false ->
+          []
+      end
+
     opts = [strategy: :one_for_one, name: Example.Supervisor]
     Supervisor.start_link(children, opts)
   end
