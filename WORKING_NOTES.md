@@ -757,6 +757,41 @@ Example.Yolo.load(trace_path: "/tmp/t.log", "env.RUST_LOG": "trace")
 ~8 MB of trace per session. `Example.Yolo.qnn_opts/1` forwards any `env.*` key straight to the NIF,
 which sets it in the real process environment before installing the subscriber.
 
+### 2 sessions / 48 fps run — throughput confirmed, thermal comparison NOT yet valid
+
+`Example.Soak.enable(workers: 2)` (one session per worker). 30 samples:
+
+| | 1 worker (overnight steady, 453 samples) | 2 workers (30 samples) |
+|---|---|---|
+| fps | 28.9 | **48.0** (drift +0.07 fps/h, min 47.43, max 48.32) |
+| mean latency | 34.6 ms | 41.6 ms |
+| process CPU | 27% of one core | 45% of one core |
+| CPU per inference | ~9.2 ms | ~9.5 ms |
+| throttled intervals | 0/453 | 0/30 |
+| errors | 0 | 0 |
+| cpu0 | 71.6 | 64.9 |
+| nspss0 | 77.6 | 75.6 |
+| ddr | 71.8 | 64.8 |
+| msm-skin | 65.1 | **54.3** |
+
+**Solid:** 48 fps is real and flat, latency rises 34.6 -> 41.6 ms (queueing, expected), nothing
+throttles, and per-inference ARM cost is unchanged at ~9.5 ms so total CPU scales with throughput
+exactly as it should (27% -> 45%).
+
+**Not yet solid — do not conclude "48 fps runs cooler than 29 fps".** cpu0 and nspss0 have flattened
+(`64.5 65.3 64.5 64.9 65.3 65.3 65.3 65.3`; nsp0 oscillating 73.9-77.0 with no trend), but they have
+only reached quasi-steady state *relative to the current board temperature*. `msm-skin` is the slowest
+thermal mass and sits **10.8 degC below** its 1-worker value while still climbing ~2.3 degC/h, and the
+junction sensors get dragged up as the board saturates. At that rate skin needs ~4 more hours. Until
+it saturates the comparison is 30 minutes against 7.5 hours and the sign could flip.
+
+Note also that ARM power went *up* 66% and DSP utilisation went from ~63% to ~100%, so on an energy
+argument this configuration should be hotter, not cooler - another reason to distrust the current
+reading and let it saturate.
+
+(Regression slopes on these sensors are misleading over short windows: the zones quantise to ~0.4-0.8
+degC steps, which manufactured a spurious "+6 degC/h" on cpu0 over 8 samples that were in fact flat.)
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):
