@@ -62,14 +62,9 @@ defmodule Example.MixProject do
       # and fetched from git rather than a relative path so this project can be
       # cloned anywhere without a required sibling checkout.
       #
-      # The SSH URL is deliberate: monoflow-ayvu/ortex is currently PRIVATE (the
-      # GitHub API 404s unauthenticated), so the https form would prompt for
-      # credentials. If the repo is made public, this becomes
-      #     {:ortex, github: "monoflow-ayvu/ortex", ref: @ortex_ref, override: true}
-      {:ortex,
-       git: "git@github.com:monoflow-ayvu/ortex.git",
-       ref: @ortex_ref,
-       override: true},
+      # monoflow-ayvu/ortex is public, so the plain github: form fetches over
+      # unauthenticated https — which is all the CI runner has (no deploy key).
+      {:ortex, github: "monoflow-ayvu/ortex", ref: @ortex_ref, override: true},
       {:nx, "~> 0.6"},
 
       # XLA-backed Nx. Needed because BinaryBackend evaluates elementwise and
