@@ -513,7 +513,7 @@ the blobs arrive as pointer files and the Buildroot package installs nothing, pr
 a silently NPU-less image. Blobs committed before LFS was set up remain plain git objects; converting
 them would need a history rewrite.
 
-Firmware size with the QNN runtime shipped: **286 MB**, against a 2 GiB slot (`assert-size-lte` guards
+Firmware size with the QNN runtime shipped: **286 MB**, against a 4 GiB slot (`assert-size-lte` guards
 it).
 
 ## 10. Open questions

@@ -1,10 +1,20 @@
 # Changelog
 
-## Unreleased
+## v0.6.0
 
 Bringing the system to parity with the hardware-proven `radxa-q6a-yocto`
 reference. See `PORTING-FROM-YOCTO.md` for the full comparison and
 `PORTING-FINDINGS.md` for the raw findings.
+
+- **Rootfs A/B slots grown 2 GiB → 4 GiB** (`fwup.conf`,
+  `fwup-ops.conf`). BREAKING for deployed devices: fwup only writes the
+  GPT in the `complete` task, so an OTA upgrade keeps the old 2 GiB
+  on-disk layout while the new firmware assumes 4 GiB offsets — a
+  subsequent upgrade would trim/write at the wrong offsets. Devices
+  flashed with ≤ v0.5.4 MUST be re-flashed (`fwup -t complete` /
+  `install-to-disk.sh`); do NOT OTA them to this release.
+  `test/qemu-smoke.sh` / `test/qemu-rollback.sh` `DISK_SIZE` default
+  raised 6144 → 9216 MiB to fit the new layout.
 
 - **Use the firmware-provided device tree** (B1). `grub.cfg` no longer
   issues a `devicetree` command. The board's SPI-NOR EDK2 compiles the

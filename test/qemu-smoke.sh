@@ -26,7 +26,7 @@ WORK_DIR="$REPO_DIR/test/work"
 DISK_IMG="$WORK_DIR/disk.img"
 SERIAL_LOG="$WORK_DIR/serial.log"
 BOOT_TIMEOUT="${BOOT_TIMEOUT:-180}"
-DISK_SIZE="${DISK_SIZE:-6144}"   # MiB; must exceed the fwup partition layout
+DISK_SIZE="${DISK_SIZE:-9216}"   # MiB; must exceed the fwup partition layout
 
 # --- Re-exec inside nix-shell if the tooling isn't available ------------------
 if ! command -v qemu-system-aarch64 >/dev/null 2>&1 \

@@ -326,7 +326,7 @@ order-sensitive — the wheel's directory must come first.
 compilation **does** work (36 ms first run including prepare), so models do not have to be
 pre-compiled to context binaries on a host. Path chosen: ONNX Runtime + QNN plugin EP, reached from
 Elixir through the patched `ortex` fork. Needs glibc >= 2.34 (satisfied) and ~115 MB of libraries
-against the 2 GiB slot cap.
+against the 4 GiB slot cap.
 
 **Open licensing question.** `blobs/qairt-runtime/*.so` are tracked in git while the package sets
 `QAIRT_RUNTIME_REDISTRIBUTE = NO`, and `blobs` is in `package_files()` (`mix.exs`) — so a

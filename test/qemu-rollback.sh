@@ -31,7 +31,7 @@ WORK_DIR="$REPO_DIR/test/work"
 DISK_IMG="$WORK_DIR/rollback-disk.img"
 SERIAL_LOG="$WORK_DIR/rollback-serial.log"
 BOOT_TIMEOUT="${BOOT_TIMEOUT:-180}"
-DISK_SIZE="${DISK_SIZE:-6144}"
+DISK_SIZE="${DISK_SIZE:-9216}"
 ESP_OFFSET=$((2048 * 512))         # BOOT_PART_OFFSET in fwup.conf
 UBOOT_ENV_OFFSET=$((64 * 512))     # UBOOT_ENV_OFFSET in fwup.conf
 

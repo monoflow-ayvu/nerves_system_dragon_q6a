@@ -708,7 +708,7 @@ actions lives in the appendix table below.
 | q5 | Does `libQnnHtpV68Stub.so` resolve `libcdsprpc.so`? | `ldd /usr/lib/libQnnHtpV68Stub.so` on target |
 | q6 | Do our ESP/partition layouts need to interoperate with the Yocto image? | Product decision. The two on-disk layouts are **mutually incompatible** today. |
 | q7 | Does the Deka doubled DMA-buf size matter for our workload? | Required before B7; if yes, carry as a patch. |
-| q8 | Is ONNX/QNN inference in scope? | If yes: needs **glibc ≥ 2.34** in the Nerves toolchain (`onnxruntime_qnn` is `manylinux_2_34`), and several hundred MB against a 2 GiB slot cap (`ours:fwup.conf:65,111`). Verify the toolchain first. |
+| q8 | Is ONNX/QNN inference in scope? | If yes: needs **glibc ≥ 2.34** in the Nerves toolchain (`onnxruntime_qnn` is `manylinux_2_34`), and several hundred MB against a 4 GiB slot cap (`ours:fwup.conf:65,111`). Verify the toolchain first. |
 | q9 | 4096-byte sector media (UFS)? | Both fwup layouts assume 512-byte logical sectors; the Yocto machine conf at least flags it (`QCOM_VFAT_SECTOR_SIZE`). |
 
 ---
