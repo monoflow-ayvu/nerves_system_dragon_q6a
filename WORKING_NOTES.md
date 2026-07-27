@@ -612,6 +612,34 @@ of hundreds of few-microsecond kernels where a futex wake (~5-50us) costs more t
 Correct default there; pathological when the graph is one 33 ms accelerator node on a passively cooled
 SoC, where the spinning heats the package and throttles the NPU that is doing the actual work.
 
+### Overnight soak RESULT — 7h33m, 777k inferences, zero errors, zero throttling
+
+Completed run with `intra_op_spinning: false` + cpufreq governor `performance`, logged to
+`/data/soak.csv` (453 one-minute samples; copies of both CSVs were pulled off the board).
+
+| | baseline (spin=ON, schedutil) | overnight (spin=OFF, performance) |
+|---|---|---|
+| duration | 20 min | **453 min (7h33m)** |
+| inferences | — | **777,441, zero errors** |
+| fps mean | 21.29 | **28.60** (p50 28.82, min 23.32, max 30.78, sd 1.29) |
+| fps last 10 min | 20.82 | 28.90 |
+| **fps drift** | **-6.55 fps/h** | **-0.01 fps/h — flat** |
+| cpu0 | 88.8 mean, 89.6 max | 71.2 mean, 73.9 max |
+| nspss0 (NPU) | 87.0 mean, 90.3 max | 77.2 mean, 82.1 max |
+| ddr | 86.5 mean, 87.2 max | 71.3 mean, 73.9 max |
+| skin | 76.1 mean, 76.9 max | 64.9 mean, 66.5 max |
+| throttled intervals | **20/20** (state 9/9, 10/10) | **0/453** (state 0 on all four devices) |
+
+Latency: mean 35.0 ms, p50 34.7 ms, worst interval-max 48.8 ms. The flat -0.01 fps/h is the headline:
+sustained throughput now equals burst throughput, so `bench/2`'s figure is finally honest for
+long-running work. The NPU is now the hottest thing on the die (nspss0 77.2 mean vs cpu0 71.2), which
+is what it should look like when the accelerator is doing the work and the cores are not.
+
+Run integrity, all verified from the CSV rather than assumed: **0 reboots** (`sys_uptime_s` never
+drops), **0 soak-process restarts** (`uptime_s` never resets), every `elapsed_s` exactly 60, no gaps,
+RSS flat at 830 MB across the whole night (the earlier "1.1 GB/night leak" projection was my own
+sampling bug - a `for` comprehension that never rebound the previous reading; there is no leak).
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):
