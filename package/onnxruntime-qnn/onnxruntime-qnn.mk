@@ -23,6 +23,12 @@ ONNXRUNTIME_QNN_LICENSE = MIT (onnxruntime), PROPRIETARY (QNN provider)
 ONNXRUNTIME_QNN_REDISTRIBUTE = NO
 ONNXRUNTIME_QNN_INSTALL_STAGING = YES
 
+# libQnnHtpV68Skel.so is a Hexagon binary ("QUALCOMM DSP6 Processor"), not AArch64 -
+# it is loaded onto the DSP over FastRPC and never runs on the ARM cores. Buildroot's
+# check-bin-arch rejects the whole package without this. Same treatment as
+# QAIRT_RUNTIME_BIN_ARCH_EXCLUDE for /usr/lib/dsp.
+ONNXRUNTIME_QNN_BIN_ARCH_EXCLUDE = /usr/lib/onnxruntime-qnn/libQnnHtpV68Skel.so
+
 # The Rust NIF links against libonnxruntime at build time when not using
 # ort's load-dynamic; staging makes the .so available to the cross toolchain.
 define ONNXRUNTIME_QNN_INSTALL_STAGING_CMDS

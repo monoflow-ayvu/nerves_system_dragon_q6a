@@ -484,20 +484,46 @@ and reuse one prepared buffer.
 /data/soak*.csv         soak results (see Example.Soak.summary/1)
 ```
 
-**`/root/qnnlibs` is hand-placed and not in the firmware.** Shipping it means vendoring ~107 MB into
-`blobs/onnxruntime-qnn/usr/lib/onnxruntime-qnn/` under a prefix that does not collide with
-qairt-runtime's `/usr/lib/libQnnHtp.so`. `Example.Yolo.qnn_opts/1` already looks in
-`/usr/lib/onnxruntime-qnn` first and falls back to `/root/qnnlibs`. Until that is done, **a freshly
-flashed board has no working NPU stack.**
+The QNN runtime **is now shipped in the image** at `/usr/lib/onnxruntime-qnn/` (105 MB, five files,
+vendored from `blobs/onnxruntime-qnn/usr/lib/onnxruntime-qnn/`). A freshly flashed board has a working
+NPU stack — verified by renaming `/root/qnnlibs` away entirely and still getting 37 ms inference with
+correct detections. `/root/qnnlibs` remains only as a fallback that `qnn_opts/1` checks second.
 
----
+Two things that made shipping it non-obvious:
+
+* **It cannot live in `/usr/lib`.** `qairt-runtime` already installs QAIRT 2.42 versions of
+  `libQnnHtp.so`, `libQnnSystem.so` and `libQnnHtpV68Stub.so` under exactly those names, and its skel
+  in `/usr/lib/dsp`. Those serve `qnn-platform-validator`; they cannot serve the ORT EP. Two stacks
+  need different versions of the same filenames, hence the subdirectory.
+* **Buildroot rejects the Hexagon skel.** `check-bin-arch` fails the whole package with
+  `architecture for "…/libQnnHtpV68Skel.so" is "QUALCOMM DSP6 Processor", should be "AArch64"`. It is
+  DSP code loaded over FastRPC and never runs on the ARM cores, so it needs
+  `ONNXRUNTIME_QNN_BIN_ARCH_EXCLUDE` (same as `QAIRT_RUNTIME_BIN_ARCH_EXCLUDE` for `/usr/lib/dsp`).
+
+The global `DSP_LIBRARY_PATH` in `erlinit.config` still points at `/usr/lib/dsp` (the QAIRT skel) and
+must stay that way. ORT consumers override it per session via ortex's `env.*` opts — the only way one
+system gives two stacks different skels. Confirmed after shipping: `qnn-platform-validator` still
+reports `Unit Test on the backend DSP: Passed`.
+
+### Git LFS
+
+`blobs/**/*.so`, `*.so.*` and `*.mbn` are tracked via LFS. **Clone with `git lfs install` first**, or
+the blobs arrive as pointer files and the Buildroot package installs nothing, printing
+`*** onnxruntime-qnn: no blobs in blobs/onnxruntime-qnn/usr; nothing installed.` — a working build with
+a silently NPU-less image. Blobs committed before LFS was set up remain plain git objects; converting
+them would need a history rewrite.
+
+Firmware size with the QNN runtime shipped: **286 MB**, against a 2 GiB slot (`assert-size-lte` guards
+it).
 
 ## 10. Open questions
 
-* **Ship `/root/qnnlibs` in the image** (§9) — the biggest gap between this working and being
-  reproducible. Blocked on the proprietary-blob redistribution decision.
-* **Prove or kill the FastRPC-domain-teardown hypothesis** (§3): from a fresh boot, start one worker
-  looping, then create a second session while it runs, and see whether the reset reproduces.
+* **Prove or kill the FastRPC-domain-teardown hypothesis** (§3). It got *stronger*: a board reset was
+  triggered by starting `qnn-probe` — a **separate OS process** — while the BEAM held live QNN sessions.
+  So the domain teardown is system-wide per DSP domain, not per-process, and **any** new QNN session
+  anywhere on the system can disrupt existing ones. Same signature every time: no crash dump,
+  `wdt_last_boot=power_on`, no OOM, no segfault. The operational rule is now broader: create every QNN
+  session up front, and do not start a second QNN *process* while one is running.
 * **Make `Ortex.Serving` hold one model per partition** so `Nx.Serving`'s `partitions: true` is real.
 * **Add an NSP-above-90 °C derived column** to the soak, since that is the only visible throttle signal.
 * **Venus (`-110`) and the audio topology blob** remain unfixed; both are known-harmless log noise today.
