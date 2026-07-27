@@ -945,31 +945,50 @@ Two bugs this shook out, both worth not repeating:
   two-model pipeline request silently kept reporting a single-model inference soak from a previous call.
   It now terminates and replaces the child, since `enable/1` is how the configuration is changed.
 
-### The board hard-resets under the two-model pipeline load — looks like power, not software
+### RETRACTED: the two-model resets were NOT power. Likely a FastRPC domain re-init race.
 
-Two models with `decode: true` resets the board within ~30 s, repeatably. Every software failure
-signature is **absent**:
+**My power-delivery conclusion was wrong** and the user disproved it directly: 100 W PD3.0 supply, board
+peak 7 W ever measured, 5.5 W while running two models with decode. The same configuration then ran
+clean, so the load itself is fine:
 
-* no new `erl_crash.dump` (the only one on disk is the old NIF failure from 13:50)
-* `wdt_last_boot=power_on`, so not a watchdog reset (a starved BEAM would show `watchdog`)
-* no OOM and no panic in dmesg; 10.4 GB free throughout
-* no segfault or unhandled-fault trace for beam.smp
+```
+  60s total_fps=44.03  det: 1336 frames 22.27 fps 44ms | pose: 1306 frames 21.77 fps 45ms | err 0/0
+ 120s total_fps=44.67  det: 1359 frames 22.65 fps 44ms | pose: 1321 frames 22.02 fps 45ms | err 0/0
+ 180s total_fps=43.93  det: 1329 frames 22.15 fps 45ms | pose: 1307 frames 21.78 fps 45ms | err 0/0
+```
 
-And the load correlation is clean:
+44 fps aggregate, ~22 fps per model, full decode both sides, zero errors, zero throttling, cpu ~62 degC,
+skin ~52 degC. This is the headline result: **two different models, both fully decoded, at ~22 fps each.**
 
-| load | result |
-|---|---|
-| idle, no soak | **stable** - uptime climbed 166 -> 439 s over 5 min, monotonic |
-| 1 model, inference only | **stable** - 7 h 33 min, 777k inferences |
-| 2 sessions, inference only | **stable** - 84 min at 48 fps |
-| 1 model + full decode | **stable** - 3.5 min, ~24 fps, 0 errors |
-| **2 models + full decode** | **hard reset within ~30 s, repeatably** |
+**What the resets actually look like.** The user's boot log for the second model shows FastRPC tearing
+the DSP domain down and building it back up:
 
-The new variable is EXLA decode on all cores *on top of* a saturated NPU - the highest combined draw
-we have put on this board. Nothing in the software leaves a trace, the board is stable idle, and the
-failure tracks total power. Leading explanation is power delivery (supply, cable, or connector),
-especially as the board was physically moved just before this started. Worth trying a different
-supply/cable before spending more time in software.
+```
+remote_handle64_close: closed module libQnnHtpV68Skel.so ... num of open handles: 0
+listener response ... failed : listener thread exited
+domain_deinit done for domain 3.
+remote_session_control Unsigned PD enable 1 request for domain 3
+Created user PD on domain 3 ... Unsigned:Y
+remote_handle64_open: Successfully opened handle ... libQnnHtpV68Skel.so?qnn_2_48_40_skel_handle_invoke
+```
+
+So creating a session closes **all** handles on domain 3 and re-creates the process domain. That is a
+hazard window: any *other* session issuing an invoke while the domain is being deinit/re-inited is
+operating on torn-down state. Every reset I triggered came from a BEAM that already had QNN sessions
+alive from interactive measurement (three sessions loaded, workers looping) when a new session was
+created. `Example.Soak`'s own setup is safe by construction - it loads every model first and only spawns
+workers afterwards - which is consistent with the clean run above.
+
+**Status: hypothesis, not conclusion.** It fits the log and the timeline, but it is not proven. What
+would prove it: from a fresh boot, start one worker looping, then create a second session while it runs,
+and see whether the reset reproduces. Until then the rule that follows from it is cheap and worth
+keeping anyway: **create all QNN sessions before starting any inference, and never load a model while
+another session is mid-invoke.**
+
+Note that a fault inside the DSP domain would explain the missing software signatures better than power
+ever did: no Erlang crash dump, no OOM, no kernel segfault for beam.smp, and `wdt_last_boot=power_on`.
+I over-weighted the absence of those signatures as evidence *for* power, when it was really just an
+absence of evidence about anything on the ARM side.
 
 ### The loading recipe (all of this remains correct)
 
