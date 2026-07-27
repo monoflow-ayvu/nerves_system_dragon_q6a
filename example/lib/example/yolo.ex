@@ -38,9 +38,17 @@ defmodule Example.Yolo do
     * `:input_size` - model input side, default `640`.
     * `:classes` - list of class names, default the 80 COCO names. Pass your own
       for a differently-trained model.
-    * `:trace_path` - write ort's `tracing` output and onnxruntime's VERBOSE log
-      to this file. The only way to see why a QNN session misbehaved, since a
-      NIF's stdout goes to the console rather than to the caller.
+    * `:trace_path` - write ort's `tracing` output and onnxruntime's VERBOSE log to
+      this file. The only way to see why a QNN session misbehaved, since a NIF's
+      stdout goes to the console rather than to the caller. To get the
+      **node-placement report** - the line that actually says whether QNN claimed
+      the graph - pass `"env.RUST_LOG": "trace"` as well: onnxruntime logs it at
+      VERBOSE, which `ort` maps onto tracing's TRACE level, and the default filter
+      is `debug`. Expect ~8 MB of trace for one session.
+
+          Example.Yolo.load(trace_path: "/tmp/t.log", "env.RUST_LOG": "trace")
+          # => ... Node(s) placed on [QNN]. Number of nodes: 1
+          #    ... Node(s) placed on [CPUExecutionProvider]. Number of nodes: 2
     * `:intra_threads` (default `0`, onnxruntime's own) and `:intra_op_spinning`
       (default `false`) -
       onnxruntime thread-pool shape. The defaults stop its workers from spin-waiting
@@ -384,6 +392,12 @@ defmodule Example.Yolo do
     ]
 
     base = if path = Keyword.get(opts, :trace_path), do: [{:trace_path, path} | base], else: base
+
+    # Forward any env.* keys straight through: the NIF pushes them into the real
+    # process environment, which is the only place onnxruntime and the QNN
+    # libraries look. `env.RUST_LOG: "trace"` is the one you will actually want -
+    # see :trace_path in the moduledoc.
+    base = base ++ Enum.filter(opts, fn {k, _} -> String.starts_with?(to_string(k), "env.") end)
 
     case Enum.find(qnn_lib_dirs(), &File.exists?(Path.join(&1, "libQnnHtp.so"))) do
       nil ->

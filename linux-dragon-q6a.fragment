@@ -371,3 +371,18 @@ CONFIG_MEDIA_SUPPORT=m
 CONFIG_MEDIA_USB_SUPPORT=y
 CONFIG_MEDIA_CAMERA_SUPPORT=y
 CONFIG_USB_VIDEO_CLASS=m
+
+# --- cpufreq: default governor `performance`.
+# --- This is an NPU-first system, and on this SoC the governor is not a power
+# --- preference - it decides whether the NPU path works well at all.
+# --- onnxruntime's intra-op pool spin-waits through an inference the HTP is
+# --- doing; stopping that (intra_op_spinning=false) drops process CPU from 539%
+# --- of wall to ~27% and 20 degC off the die, but under schedutil there is then
+# --- no load for the governor to react to, the cores park at 691 MHz, and every
+# --- CPU-side segment and FastRPC dispatch takes twice as long - measured 29.2
+# --- fps under `performance` versus 20.6 under schedutil, same config otherwise.
+# --- Set in Kconfig rather than poked into sysfs at boot so it applies from the
+# --- moment each policy comes online, with no userspace race. schedutil and
+# --- ondemand stay built in, so switching back at runtime still works.
+# CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set
+CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y

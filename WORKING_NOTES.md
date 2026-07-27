@@ -680,6 +680,83 @@ Two gotchas found while measuring this, worth not re-deriving:
   (`init_tracing` is behind a `OnceLock`). Once the soak has created a session, tracing can no longer
   be enabled without a reboot. Worth changing if remote diagnosis matters.
 
+### Predicting memory and load time for a model (measured across 4 models, 36-100 MB)
+
+| model | weights | spill+fill | RSS delta | RSS/(spill+fill) | RSS/weights | load s/MB | steady |
+|---|---|---|---|---|---|---|---|
+| yolo11s det | 36 MB | 91 | 82 MB | 0.901 | 2.28 | 0.090 | 34 ms |
+| yolo11s pose | 38 MB | 87 | 80 MB | 0.920 | 2.11 | 0.091 | 34 ms |
+| yolo11m det | 76 MB | 334 | 303 MB | 0.907 | 3.99 | 0.087 | 59 ms |
+| yolo11l pose | 100 MB | 360 | 338 MB | 0.939 | 3.38 | 0.091 | 67 ms |
+
+**Two usable rules, one trap:**
+
+* **Memory: `RSS ~= 0.92 x (spill_bytes + fill_bytes)`** — 4.1% spread over a 4x size range. Both
+  numbers are printed by `libQnnHtpPrepare` during graph prepare, so one `qnn-probe` run predicts the
+  deployed footprint without deploying anything.
+* **Load time: `~0.09 s per MB of weights`** — 5.1% spread, near-perfectly linear.
+* **`RSS/weights` ranges 2.11-3.99 — not a usable constant.** If file size is all you have, budget 4x.
+
+Plus a **one-time ~238 MB per OS process** for the QNN backend and prepare libraries: on a clean boot
+the first model costs +320 MB where the same model costs +82 MB later. (An earlier estimate of ~50 MB
+was wrong — it compared two loads inside an already-warm process.)
+
+Extra sessions of the **same** model are cheap: 4 sessions of yolo11s cost 114 MB total, ~28 MB each
+after the first, because the weights file is mapped once.
+
+### Nx.Serving / Nx.Batch: batching is impossible, but partitions are worth 1.6x
+
+* **`Nx.Batch` buys nothing here.** The AI Hub exports pin batch to 1 — feeding `{2,3,640,640}` is
+  rejected outright: `Got invalid dimensions for input: images ... Got: 2 Expected: 1`. A batched
+  export would also be a *separate* static QNN graph with its own compile cost, since HTP graphs are
+  fixed-shape.
+* **Concurrency across separate sessions is the real win**, and `Nx.Serving`'s `partitions: true` is
+  exactly that (`Ortex.Serving` already implements the `Nx.Serving` behaviour). Measured, 30
+  inferences per worker:
+
+```
+  1 session : 32.5 fps aggregate   p50 30ms  p95 31ms
+  2 sessions: 46.8 fps aggregate   p50 41ms  p95 46ms   <-- knee
+  3 sessions: 47.3 fps aggregate   p50 62ms  p95 65ms
+  4 sessions: 47.5 fps aggregate   p50 83ms  p95 85ms
+```
+
+  The DSP saturates at ~47 fps. Past two partitions you buy only latency. Cost: ~28 MB per extra
+  session of the same model.
+* **Do NOT share one session across concurrent callers.** `Ortex.run` holds a `Mutex<Session>`, so two
+  workers on one session gave 32.5 fps with p50 latency doubled to 61 ms - all queueing, no gain.
+  `Nx.Serving` is a better front end than the bare mutex regardless (real queue, backpressure,
+  timeouts, supervision).
+
+### cpufreq default governor is now `performance` (kernel, not sysfs)
+
+`# CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set` + `CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y` in
+`linux-dragon-q6a.fragment`. Verified on a fresh boot with nothing having touched sysfs:
+`performance performance performance`, 1958/2400/2707 MHz. Set in Kconfig so it applies as each policy
+comes online with no userspace race; schedutil and ondemand stay built in for runtime switching.
+On this board the governor is not a power preference - see the spin-wait section above for why it
+decides whether the NPU path performs at all.
+
+### ORTEX_TRACE / trace_path now works from any session — and needs RUST_LOG=trace
+
+The old `init_tracing` latched a `OnceLock` **even when no trace was requested**, so once the soak had
+created a session, tracing was dead for the life of the process - the running node was undiagnosable.
+Now the writer is a static swappable `Mutex<Option<File>>` behind a `MakeWriter`, and the global
+subscriber is installed only on the first actual request.
+
+**The node-placement report additionally needs `env.RUST_LOG: "trace"`.** onnxruntime logs it at
+VERBOSE, `ort` maps that onto tracing's TRACE level, and the default filter is `debug`. Raising the
+*session* log severity does nothing for it (tried; byte-identical output). Verified end to end:
+
+```elixir
+Example.Yolo.load(trace_path: "/tmp/t.log", "env.RUST_LOG": "trace")
+# Node(s) placed on [QNN]. Number of nodes: 1
+# Node(s) placed on [CPUExecutionProvider]. Number of nodes: 2
+```
+
+~8 MB of trace per session. `Example.Yolo.qnn_opts/1` forwards any `env.*` key straight to the NIF,
+which sets it in the real process environment before installing the subscriber.
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):
