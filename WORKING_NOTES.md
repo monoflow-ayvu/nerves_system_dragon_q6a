@@ -899,6 +899,78 @@ an outside clone will still fail on *auth* rather than on a missing sibling dire
 public and switching to `github: "monoflow-ayvu/ortex"` is a one-line change; the SSH URL is used for
 now because the https form would prompt for credentials on this machine.
 
+### Where EXLA jit helps, and where more of it would hurt
+
+The hot paths were already `defn`-jitted (`letterbox`, `head`, `pose_head`). The remaining win was not
+"more jit" but **fixed shapes**, so that work the BEAM was doing could move into the kernel:
+
+`Nx.top_k` inside the decode kernels replaced a BEAM-side confidence threshold. Before: move an
+8400-element score vector across, filter it in Elixir (~5 ms), then gather a *variable* number of rows -
+a shape that changes per frame, so XLA recompiled the gather whenever the count moved. After: the kernel
+takes a fixed top-k (300, Ultralytics' own pre-NMS cap) and only k rows cross. Measured: the whole head
+including top_k is **3 ms**, and moving k rows measures **0 ms**.
+
+| | decode before | decode after |
+|---|---|---|
+| detection | 17 ms | **11 ms** |
+| pose | 13 ms | **9 ms** |
+
+End to end from a prepared frame: detection 48 ms (20.8 fps), pose 54 ms (18.5 fps).
+
+**Where more Nx would be worse:** NMS. It needs a kernel whose shape depends on the survivor count, so
+XLA would recompile per frame as that count moved - far more than the few ms it costs on a few hundred
+rows. The rule on this target is not "jit everything", it is "jit everything whose shape is static, and
+keep the shape static on purpose".
+
+### Soak: multiple models with per-model counters
+
+`Example.Soak.enable(models: [...], decode: true)`. Each model gets its own session and worker;
+`workers: N` replicates each model N times and replicas share a label, so per-model counters sum across
+sessions. `decode: true` runs the full `detect`/`detect_pose` pipeline instead of bare `Ortex.run`, so
+the CSV reflects inference *and* CPU-side decode. The pose decoder is selected automatically for a path
+whose directory mentions pose; pass `{path, :detect | :pose | :none}` to be explicit.
+
+CSV gains `mode`, and a `frames_/fps_/mean_us_/errors_` block per model:
+
+```
+run_started_at,sampled_at,uptime_s,sys_uptime_s,elapsed_s,iters,fps,mean_us,errors,governor,
+workers,mode,frames_det,fps_det,mean_us_det,errors_det,<34 thermal zones>,<3 cpufreq>,<4 cooling>
+```
+
+Two bugs this shook out, both worth not repeating:
+
+* `length(state.workers)` survived the change of `workers` from a list to a map, and only blew up in
+  `handle_call(:status)` - the soak ran fine and crashed the moment anyone asked how it was doing.
+* `enable/1` returned the already-running process instead of applying the options it was given, so a
+  two-model pipeline request silently kept reporting a single-model inference soak from a previous call.
+  It now terminates and replaces the child, since `enable/1` is how the configuration is changed.
+
+### The board hard-resets under the two-model pipeline load — looks like power, not software
+
+Two models with `decode: true` resets the board within ~30 s, repeatably. Every software failure
+signature is **absent**:
+
+* no new `erl_crash.dump` (the only one on disk is the old NIF failure from 13:50)
+* `wdt_last_boot=power_on`, so not a watchdog reset (a starved BEAM would show `watchdog`)
+* no OOM and no panic in dmesg; 10.4 GB free throughout
+* no segfault or unhandled-fault trace for beam.smp
+
+And the load correlation is clean:
+
+| load | result |
+|---|---|
+| idle, no soak | **stable** - uptime climbed 166 -> 439 s over 5 min, monotonic |
+| 1 model, inference only | **stable** - 7 h 33 min, 777k inferences |
+| 2 sessions, inference only | **stable** - 84 min at 48 fps |
+| 1 model + full decode | **stable** - 3.5 min, ~24 fps, 0 errors |
+| **2 models + full decode** | **hard reset within ~30 s, repeatably** |
+
+The new variable is EXLA decode on all cores *on top of* a saturated NPU - the highest combined draw
+we have put on this board. Nothing in the software leaves a trace, the board is stable idle, and the
+failure tracks total power. Leading explanation is power delivery (supply, cable, or connector),
+especially as the board was physically moved just before this started. Worth trying a different
+supply/cable before spending more time in software.
+
 ### The loading recipe (all of this remains correct)
 
 Proven by onnxruntime's own placement report (session log severity VERBOSE):

@@ -66,6 +66,7 @@ defmodule Example.Soak do
   @csv "/data/soak.csv"
   @interval :timer.minutes(1)
   @default_image "/root/bus.jpg"
+  @default_model "/root/det/model.onnx"
 
   ## API
 
@@ -83,12 +84,15 @@ defmodule Example.Soak do
     # Started under the application supervisor, NOT linked to the caller. Calling
     # start_link/1 from an IEx-over-SSH session would tie the soak's lifetime to
     # that session, so closing the terminal would end the overnight run.
-    case Supervisor.start_child(Example.Supervisor, {__MODULE__, opts}) do
-      {:ok, pid} -> {:ok, pid}
-      {:error, {:already_started, pid}} -> {:ok, pid}
-      {:error, :already_present} -> Supervisor.restart_child(Example.Supervisor, __MODULE__)
-      other -> other
-    end
+    #
+    # An already-running soak is replaced rather than left alone: enable/1 is how
+    # the configuration is changed, and returning the existing process would keep
+    # reporting numbers for a model set and mode the caller did not ask for. That
+    # bug cost a debugging round - a two-model pipeline request silently kept
+    # running a single-model inference soak from a previous call.
+    _ = Supervisor.terminate_child(Example.Supervisor, __MODULE__)
+    _ = Supervisor.delete_child(Example.Supervisor, __MODULE__)
+    Supervisor.start_child(Example.Supervisor, {__MODULE__, opts})
   end
 
   @doc "Stop soaking and clear the boot flag."
@@ -184,32 +188,42 @@ defmodule Example.Soak do
     opts = state.opts
     image = Keyword.get(opts, :image, @default_image)
 
-    with {:ok, session} <- Example.Yolo.load(opts),
-         {:ok, frame} <- Example.Yolo.prepare(image, Keyword.put(opts, :input_size, session.side)) do
-      zones = discover_zones()
-      cooling = discover_cooling()
-      ensure_header(zones, cooling)
-      previous_governor = set_governor(Keyword.get(opts, :governor, "performance"))
+    # `models:` gives one entry per model; `workers:` replicates each model that
+    # many times. Replicas of the same model share a label, so per-model counters
+    # sum across its sessions - two sessions of the detector still report as "det".
+    #
+    # Each entry gets its OWN session. Ortex.run holds a Mutex<Session>, so workers
+    # sharing a session merely queue: 32.5 fps with p50 latency doubled, against
+    # 46.8 fps for two independent sessions. That is pipelining, not parallelism
+    # across devices - there is one NPU, ~21 ms of an inference is serial DSP
+    # compute and ~12 ms is ARM-side work, so a second in-flight request overlaps
+    # its ARM phase with the first's DSP phase. The DSP saturates at ~47 inf/s.
+    decode? = Keyword.get(opts, :decode, false)
+    replicas = Keyword.get(opts, :workers, 1)
 
-      # One SESSION per worker, not one session shared by N workers. Ortex.run holds
-      # a Mutex<Session>, so N workers on one session just queue: measured 32.5 fps
-      # with p50 latency doubled, against 46.8 fps for two independent sessions.
-      # Note this is pipelining, not parallel devices - there is one NPU. Roughly
-      # 21 ms of an inference is serial DSP compute and ~12 ms is ARM-side
-      # marshalling and RPC, so a second in-flight request overlaps its ARM phase
-      # with the first's DSP phase. The DSP saturates at ~47 fps; a third and
-      # fourth session add latency and nothing else.
-      extra_sessions =
-        for _ <- 2..Keyword.get(opts, :workers, 1)//1 do
-          {:ok, s} = Example.Yolo.load(opts)
-          s
+    models =
+      opts
+      |> Keyword.get(:models, [Keyword.get(opts, :model, @default_model)])
+      |> Enum.map(&normalize_model/1)
+
+    try do
+      loaded =
+        for {path, kind} <- models, _ <- 1..replicas//1 do
+          {:ok, sess} = Example.Yolo.load(Keyword.put(opts, :model, path))
+          {:ok, fr} = Example.Yolo.prepare(image, Keyword.put(opts, :input_size, sess.side))
+          %{label: label_for(path), path: path, kind: kind, session: sess, frame: fr}
         end
 
-      sessions = [session | extra_sessions]
-      workers = for s <- sessions, do: spawn_worker(s.ortex, frame.input)
+      labels = loaded |> Enum.map(& &1.label) |> Enum.uniq()
+      zones = discover_zones()
+      cooling = discover_cooling()
+      ensure_header(zones, cooling, labels)
+      previous_governor = set_governor(Keyword.get(opts, :governor, "performance"))
+      workers = Map.new(loaded, fn m -> {spawn_worker(m, decode?), m.label} end)
 
       Logger.info(
-        "Soak started: #{image}, #{length(workers)} worker(s), logging to #{@csv} every minute"
+        "Soak started: #{image}, models #{inspect(labels)}, #{map_size(workers)} session(s), " <>
+          "mode=#{if decode?, do: "pipeline", else: "inference"}, logging to #{@csv} every minute"
       )
 
       Process.send_after(self(), :sample, @interval)
@@ -225,30 +239,31 @@ defmodule Example.Soak do
          zones: zones,
          cooling: cooling,
          image: image,
-         session: session,
-         sessions: sessions,
-         frame: frame,
+         decode?: decode?,
+         loaded: loaded,
+         labels: labels,
          workers: workers,
          previous_governor: previous_governor,
-         acc: new_acc(),
+         acc: new_acc(labels),
          totals: %{iters: 0, errors: 0, samples: 0}
        }}
-    else
-      {:error, reason} ->
-        Logger.warning("Soak setup failed (attempt #{state.attempts + 1}): #{inspect(reason)}")
+    rescue
+      e ->
+        Logger.warning("Soak setup failed (attempt #{state.attempts + 1}): #{Exception.message(e)}")
         Process.send_after(self(), :setup, :timer.seconds(15))
         {:noreply, %{state | attempts: state.attempts + 1}}
     end
   end
 
   @impl true
-  def handle_info({:tick, us}, %{status: :running} = state) do
-    {:noreply, %{state | acc: accumulate(state.acc, us)}}
+  def handle_info({:tick, label, us}, %{status: :running} = state) do
+    {:noreply, %{state | acc: accumulate(state.acc, label, us)}}
   end
 
   @impl true
-  def handle_info({:tick_error, _reason}, %{status: :running} = state) do
-    {:noreply, %{state | acc: Map.update!(state.acc, :errors, &(&1 + 1))}}
+  def handle_info({:tick_error, label, _reason}, %{status: :running} = state) do
+    {:noreply,
+     %{state | acc: Map.update!(state.acc, label, &%{&1 | errors: &1.errors + 1})}}
   end
 
   @impl true
@@ -261,20 +276,21 @@ defmodule Example.Soak do
   # still be running in the morning.
   @impl true
   def handle_info({:EXIT, pid, reason}, state) do
-    if pid in Map.get(state, :workers, []) do
-      Logger.warning("Soak worker exited (#{inspect(reason)}); restarting it")
-      # Restart on the first session; a lost worker is rare and this keeps the
-      # replacement simple rather than tracking worker-to-session pairs.
-      worker = spawn_worker(state.session.ortex, state.frame.input)
+    case Map.fetch(Map.get(state, :workers, %{}), pid) do
+      {:ok, label} ->
+        Logger.warning("Soak worker for #{label} exited (#{inspect(reason)}); restarting it")
+        m = Enum.find(state.loaded, &(&1.label == label))
+        new_pid = spawn_worker(m, state.decode?)
 
-      {:noreply,
-       %{
-         state
-         | workers: [worker | List.delete(state.workers, pid)],
-           acc: Map.update!(state.acc, :errors, &(&1 + 1))
-       }}
-    else
-      {:noreply, state}
+        {:noreply,
+         %{
+           state
+           | workers: state.workers |> Map.delete(pid) |> Map.put(new_pid, label),
+             acc: Map.update!(state.acc, label, &%{&1 | errors: &1.errors + 1})
+         }}
+
+      :error ->
+        {:noreply, state}
     end
   end
 
@@ -293,12 +309,12 @@ defmodule Example.Soak do
     {:reply,
      %{
        image: state.image,
-       model: state.session.model,
-       workers_configured: length(state.workers),
+       mode: if(state.decode?, do: :pipeline, else: :inference),
+       models: Map.new(state.loaded, fn m -> {m.label, {m.path, m.kind}} end),
+       workers_configured: map_size(state.workers),
        started: state.started,
        uptime_s: div(System.monotonic_time(:millisecond) - state.started_mono, 1000),
-       workers: length(state.workers),
-       current_interval: Map.put(state.acc, :elapsed_ms, elapsed_ms),
+       current_interval: %{elapsed_ms: elapsed_ms, per_model: state.acc},
        totals: state.totals,
        csv: @csv
      }, state}
@@ -313,7 +329,7 @@ defmodule Example.Soak do
 
   @impl true
   def terminate(_reason, state) do
-    Enum.each(Map.get(state, :workers, []), &Process.exit(&1, :kill))
+    state |> Map.get(:workers, %{}) |> Map.keys() |> Enum.each(&Process.exit(&1, :kill))
     if g = Map.get(state, :previous_governor), do: set_governor(g)
     :ok
   end
@@ -342,16 +358,24 @@ defmodule Example.Soak do
 
   ## Inference loop
 
-  defp spawn_worker(model, input) do
+  defp spawn_worker(m, decode?) do
     parent = self()
+    label = m.label
+
+    work =
+      case {decode?, m.kind} do
+        {true, :pose} -> fn -> Example.Yolo.detect_pose(m.frame, session: m.session) end
+        {true, _} -> fn -> Example.Yolo.detect(m.frame, session: m.session) end
+        {false, _} -> fn -> Ortex.run(m.session.ortex, {m.frame.input}) end
+      end
 
     spawn_link(fn ->
       loop = fn loop ->
         try do
-          {us, _} = :timer.tc(fn -> Ortex.run(model, {input}) end)
-          send(parent, {:tick, us})
+          {us, _} = :timer.tc(work)
+          send(parent, {:tick, label, us})
         rescue
-          e -> send(parent, {:tick_error, Exception.message(e)})
+          e -> send(parent, {:tick_error, label, Exception.message(e)})
         end
 
         loop.(loop)
@@ -361,29 +385,55 @@ defmodule Example.Soak do
     end)
   end
 
-  defp new_acc, do: %{iters: 0, sum_us: 0, min_us: nil, max_us: nil, errors: 0}
-
-  defp accumulate(acc, us) do
-    %{
-      acc
-      | iters: acc.iters + 1,
-        sum_us: acc.sum_us + us,
-        min_us: min(acc.min_us || us, us),
-        max_us: max(acc.max_us || us, us)
-    }
+  defp new_acc(labels) do
+    Map.new(labels, fn l -> {l, %{iters: 0, sum_us: 0, min_us: nil, max_us: nil, errors: 0}} end)
   end
+
+  defp accumulate(acc, label, us) do
+    Map.update!(acc, label, fn a ->
+      %{
+        a
+        | iters: a.iters + 1,
+          sum_us: a.sum_us + us,
+          min_us: min(a.min_us || us, us),
+          max_us: max(a.max_us || us, us)
+      }
+    end)
+  end
+
+  defp totals_of(acc) do
+    Enum.reduce(acc, %{iters: 0, errors: 0, sum_us: 0}, fn {_l, a}, t ->
+      %{iters: t.iters + a.iters, errors: t.errors + a.errors, sum_us: t.sum_us + a.sum_us}
+    end)
+  end
+
+  # A bare path means "decode it with the detection head". Anything whose directory
+  # name mentions pose gets the pose decoder, since the two heads are not
+  # interchangeable; pass {path, :detect | :pose | :none} to be explicit.
+  defp normalize_model({path, kind}), do: {path, kind}
+
+  defp normalize_model(path) when is_binary(path) do
+    if String.contains?(String.downcase(path), "pose"), do: {path, :pose}, else: {path, :detect}
+  end
+
+  defp label_for(path), do: Path.basename(Path.dirname(path))
 
   ## Sampling
 
   defp write_sample(state) do
     now_mono = System.monotonic_time(:millisecond)
     interval_ms = now_mono - state.interval_start
-    acc = state.acc
+    tot = totals_of(state.acc)
 
-    fps =
-      if acc.iters > 0 and interval_ms > 0,
-        do: Float.round(acc.iters * 1000 / interval_ms, 2),
-        else: 0.0
+    fps = fn iters -> if interval_ms > 0, do: Float.round(iters * 1000 / interval_ms, 2), else: 0.0 end
+
+    # Per-model columns come first as a block per label, so the header stays stable
+    # for a given model set and a row is readable without cross-referencing.
+    per_model =
+      Enum.flat_map(state.labels, fn label ->
+        a = state.acc[label]
+        [a.iters, fps.(a.iters), if(a.iters > 0, do: div(a.sum_us, a.iters), else: 0), a.errors]
+      end)
 
     row =
       [
@@ -392,16 +442,15 @@ defmodule Example.Soak do
         div(now_mono - state.started_mono, 1000),
         system_uptime_s(),
         div(interval_ms, 1000),
-        acc.iters,
-        fps,
-        if(acc.iters > 0, do: div(acc.sum_us, acc.iters), else: 0),
-        acc.min_us || 0,
-        acc.max_us || 0,
-        acc.errors,
+        tot.iters,
+        fps.(tot.iters),
+        if(tot.iters > 0, do: div(tot.sum_us, tot.iters), else: 0),
+        tot.errors,
         read_trim("/sys/devices/system/cpu/cpufreq/policy0/scaling_governor") || "",
-        length(state.workers),
-        Path.basename(Path.dirname(state.session.model))
+        map_size(state.workers),
+        if(state.decode?, do: "pipeline", else: "inference")
       ] ++
+        per_model ++
         Enum.map(state.zones, fn {_name, path} -> read_int(path) end) ++
         Enum.map(cpufreq_paths(), &read_int/1) ++
         Enum.map(state.cooling, fn {_name, path} -> read_int(path) end)
@@ -410,22 +459,24 @@ defmodule Example.Soak do
 
     %{
       state
-      | acc: new_acc(),
+      | acc: new_acc(state.labels),
         interval_start: now_mono,
         totals: %{
-          iters: state.totals.iters + acc.iters,
-          errors: state.totals.errors + acc.errors,
+          iters: state.totals.iters + tot.iters,
+          errors: state.totals.errors + tot.errors,
           samples: state.totals.samples + 1
         }
     }
   end
 
-  defp ensure_header(zones, cooling) do
+  defp ensure_header(zones, cooling, labels) do
     File.mkdir_p!(Path.dirname(@csv))
 
     header =
       Enum.join(
-        ~w(run_started_at sampled_at uptime_s sys_uptime_s elapsed_s iters fps mean_us min_us max_us errors governor workers model) ++
+        ~w(run_started_at sampled_at uptime_s sys_uptime_s elapsed_s iters fps mean_us errors
+           governor workers mode) ++
+          Enum.flat_map(labels, fn l -> ["frames_#{l}", "fps_#{l}", "mean_us_#{l}", "errors_#{l}"] end) ++
           Enum.map(zones, fn {name, _} -> name end) ++
           Enum.map(cpufreq_paths(), &("cpufreq_" <> (&1 |> Path.split() |> Enum.at(-2)))) ++
           Enum.map(cooling, fn {name, _} -> "cool_" <> name end),
@@ -437,11 +488,11 @@ defmodule Example.Soak do
         append(header)
 
       {:ok, contents} ->
-        # Rotate unless the existing first line is EXACTLY this header. Two ways to
-        # get here: an unclean reset before the filesystem flushed left a file of
-        # data rows with no header at all, and adding a column changes the schema -
-        # in which case appending would silently produce a file with two different
-        # row widths and no way to tell which is which.
+        # Rotate unless the first line is EXACTLY this header. Reachable two ways: an
+        # unclean reset before the filesystem flushed leaves rows with no header, and
+        # changing the model set (or adding a column) changes the schema - appending
+        # would produce a file with two different row widths and no way to tell which
+        # is which.
         if String.split(contents, "\n") |> hd() != header do
           File.rename(@csv, @csv <> ".old-" <> Integer.to_string(System.os_time(:second)))
           append(header)

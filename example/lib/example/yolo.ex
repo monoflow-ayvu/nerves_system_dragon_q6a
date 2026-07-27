@@ -96,6 +96,10 @@ defmodule Example.Yolo do
 
   @default_model "/root/det/model.onnx"
 
+  # Candidates kept before NMS. Fixed so the decode kernels have a static shape;
+  # 300 is Ultralytics' own pre-NMS cap.
+  @max_candidates 300
+
   # Ultralytics' letterbox fill value.
   @pad_value 114
 
@@ -191,7 +195,7 @@ defmodule Example.Yolo do
 
       detections =
         raw
-        |> decode(Keyword.get(opts, :conf, 0.25))
+        |> decode(Keyword.get(opts, :conf, 0.25), Keyword.get(opts, :max_candidates, @max_candidates))
         |> nms(Keyword.get(opts, :iou, 0.45))
         |> Enum.take(Keyword.get(opts, :max_detections, 100))
         |> Enum.map(&to_original_coords(&1, geom, classes))
@@ -242,7 +246,7 @@ defmodule Example.Yolo do
       {dec_us, people} =
         :timer.tc(fn ->
           raw
-          |> decode_pose(frame.geom, Keyword.get(opts, :conf, 0.25))
+          |> decode_pose(frame.geom, Keyword.get(opts, :conf, 0.25), Keyword.get(opts, :max_candidates, @max_candidates))
           |> nms(Keyword.get(opts, :iou, 0.45))
           |> Enum.take(Keyword.get(opts, :max_detections, 100))
           |> Enum.map(&finish_person(&1, Keyword.get(opts, :min_keypoint_score, 0.5)))
@@ -630,7 +634,8 @@ defmodule Example.Yolo do
   # bake them in as constants and XLA would compile a fresh kernel for every
   # distinct image aspect ratio; as tensors they are runtime arguments and the
   # kernel compiles once for a given output shape.
-  defnp pose_head(raw, scale, pad, size) do
+  defnp pose_head(raw, scale, pad, size, opts \\ []) do
+    opts = keyword!(opts, [:k])
     t = raw |> Nx.squeeze(axes: [0]) |> Nx.transpose(axes: [1, 0])
     anchors = Nx.axis_size(t, 0)
     n_kpt = div(Nx.axis_size(t, 1) - 5, 3)
@@ -664,53 +669,46 @@ defmodule Example.Yolo do
     ky = (Nx.slice_along_axis(kpt, 1, 1, axis: 2) - pad_y) / scale
     kc = Nx.slice_along_axis(kpt, 2, 1, axis: 2)
 
+    {top_scores, idx} = Nx.top_k(scores, k: opts[:k])
+
     {
-      Nx.concatenate([x1, y1, x2, y2], axis: 1),
-      scores,
-      Nx.concatenate([kx, ky, kc], axis: 2)
+      top_scores,
+      Nx.take(Nx.concatenate([x1, y1, x2, y2], axis: 1), idx, axis: 0),
+      Nx.take(Nx.concatenate([kx, ky, kc], axis: 2), idx, axis: 0)
     }
   end
 
-  # Threshold and NMS stay on the BEAM deliberately. Both would need a kernel whose
-  # shape depends on how many anchors survived, so XLA would recompile per frame as
-  # the count moved - far more than the few ms they cost here on ~50 survivors.
-  defp decode_pose(raw, geom, conf) do
+  # Same fixed-shape trick as `head/2`: top_k in the kernel, so only k rows cross to
+  # the BEAM and the gather shape never changes. NMS stays on the BEAM - it needs a
+  # kernel whose shape depends on the survivor count, which XLA would recompile per
+  # frame, and it costs only a few ms on a few hundred rows.
+  defp decode_pose(raw, geom, conf, k) do
     %{scale: scale, pad_x: pad_x, pad_y: pad_y, w0: w0, h0: h0} = geom
+    {_batch, _attrs, anchors} = Nx.shape(raw)
 
-    {boxes_t, scores_t, kpts_t} =
+    {scores_t, boxes_t, kpts_t} =
       pose_head(
         raw,
         Nx.tensor(scale, type: :f32),
         Nx.tensor([pad_x, pad_y], type: :f32),
-        Nx.tensor([w0, h0], type: :f32)
+        Nx.tensor([w0, h0], type: :f32),
+        k: min(k, anchors)
       )
 
-    kept =
-      scores_t
+    boxes = boxes_t |> Nx.to_flat_list() |> Enum.chunk_every(4)
+
+    joints =
+      kpts_t
       |> Nx.to_flat_list()
-      |> Enum.with_index()
-      |> Enum.filter(fn {score, _anchor} -> score >= conf end)
+      |> Enum.chunk_every(3)
+      |> Enum.chunk_every(Nx.axis_size(kpts_t, 1))
 
-    if kept == [] do
-      []
-    else
-      idx = Nx.tensor(Enum.map(kept, fn {_score, anchor} -> anchor end))
-      boxes = boxes_t |> Nx.take(idx, axis: 0) |> Nx.to_flat_list() |> Enum.chunk_every(4)
-
-      kpts =
-        kpts_t
-        |> Nx.take(idx, axis: 0)
-        |> Nx.to_flat_list()
-        |> Enum.chunk_every(3)
-        |> Enum.chunk_every(Nx.axis_size(kpts_t, 1))
-
-      [boxes, kpts, Enum.map(kept, fn {score, _anchor} -> score end)]
-      |> Enum.zip_with(fn [[x1, y1, x2, y2], joints, score] ->
-        # class_id 0 keeps these compatible with nms/2, which groups by class.
-        %{class_id: 0, score: score, x1: x1, y1: y1, x2: x2, y2: y2, joints: joints}
-      end)
-      |> Enum.sort_by(& &1.score, :desc)
-    end
+    [boxes, joints, Nx.to_flat_list(scores_t)]
+    |> Enum.zip_with(fn [[x1, y1, x2, y2], joints, score] ->
+      # class_id 0 keeps these compatible with nms/2, which groups by class.
+      %{class_id: 0, score: score, x1: x1, y1: y1, x2: x2, y2: y2, joints: joints}
+    end)
+    |> Enum.take_while(fn p -> p.score >= conf end)
   end
 
   defp finish_person(person, min_kpt_score) do
@@ -733,58 +731,50 @@ defmodule Example.Yolo do
     }
   end
 
-  # Boxes, best-class score and class id for every anchor, as ONE compiled kernel.
-  # `nc` is a defn option so XLA compiles one kernel per class count and reuses it.
+  # Boxes, score and class id for the top `k` anchors, as ONE compiled kernel.
+  #
+  # `top_k` inside the kernel is what makes this fixed-shape: the confidence
+  # threshold used to run on the BEAM over all 8400 scores, which meant moving an
+  # 8400-element vector across and filtering it in Elixir (~5 ms), and then gathering
+  # a *variable* number of rows - a shape that changes per frame, so XLA had to
+  # recompile the gather whenever the count moved. Taking a fixed k in-kernel costs
+  # 3 ms for the whole head and moves only k rows, which measures as 0 ms.
+  #
+  # k caps candidates BEFORE NMS. 300 is Ultralytics' own pre-NMS cap; beyond that,
+  # the lowest-scoring candidates are dropped.
   defnp head(raw, opts \\ []) do
-    opts = keyword!(opts, [:nc])
+    opts = keyword!(opts, [:nc, :k])
     t = raw |> Nx.squeeze(axes: [0]) |> Nx.transpose(axes: [1, 0])
     cls = Nx.slice_along_axis(t, 4, opts[:nc], axis: 1)
 
+    {scores, idx} = Nx.top_k(Nx.reduce_max(cls, axes: [1]), k: opts[:k])
+
     {
-      Nx.slice_along_axis(t, 0, 4, axis: 1),
-      Nx.reduce_max(cls, axes: [1]),
-      Nx.argmax(cls, axis: 1)
+      scores,
+      Nx.take(Nx.argmax(cls, axis: 1), idx),
+      Nx.take(Nx.slice_along_axis(t, 0, 4, axis: 1), idx, axis: 0)
     }
   end
 
-  defp decode(raw, conf) do
-    {_batch, attrs, _anchors} = Nx.shape(raw)
-    {boxes_t, scores_t, ids_t} = head(raw, nc: attrs - 4)
+  defp decode(raw, conf, k) do
+    {_batch, attrs, anchors} = Nx.shape(raw)
+    {scores_t, ids_t, boxes_t} = head(raw, nc: attrs - 4, k: min(k, anchors))
 
-    # Threshold on the BEAM, but only over the 8400 per-anchor scores - the one
-    # small vector in the whole head. Everything wide stays in the kernel above.
-    kept =
-      scores_t
-      |> Nx.to_flat_list()
-      |> Enum.with_index()
-      |> Enum.filter(fn {score, _anchor} -> score >= conf end)
+    boxes = boxes_t |> Nx.to_flat_list() |> Enum.chunk_every(4)
 
-    if kept == [] do
-      []
-    else
-      idx = Nx.tensor(Enum.map(kept, fn {_score, anchor} -> anchor end))
-
-      boxes =
-        boxes_t
-        |> Nx.take(idx, axis: 0)
-        |> Nx.to_flat_list()
-        |> Enum.chunk_every(4)
-
-      ids = ids_t |> Nx.take(idx) |> Nx.to_flat_list()
-
-      [boxes, ids, Enum.map(kept, fn {score, _anchor} -> score end)]
-      |> Enum.zip_with(fn [[cx, cy, w, h], id, score] ->
-        %{
-          class_id: id,
-          score: score,
-          x1: cx - w / 2,
-          y1: cy - h / 2,
-          x2: cx + w / 2,
-          y2: cy + h / 2
-        }
-      end)
-      |> Enum.sort_by(& &1.score, :desc)
-    end
+    # top_k already returns descending, so no sort is needed here.
+    [boxes, Nx.to_flat_list(ids_t), Nx.to_flat_list(scores_t)]
+    |> Enum.zip_with(fn [[cx, cy, w, h], id, score] ->
+      %{
+        class_id: id,
+        score: score,
+        x1: cx - w / 2,
+        y1: cy - h / 2,
+        x2: cx + w / 2,
+        y2: cy + h / 2
+      }
+    end)
+    |> Enum.take_while(fn d -> d.score >= conf end)
   end
 
   # Greedy per-class NMS. The candidate list is post-threshold, so it is small;
