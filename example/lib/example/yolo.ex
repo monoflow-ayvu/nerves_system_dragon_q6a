@@ -41,6 +41,10 @@ defmodule Example.Yolo do
     * `:trace_path` - write ort's `tracing` output and onnxruntime's VERBOSE log
       to this file. The only way to see why a QNN session misbehaved, since a
       NIF's stdout goes to the console rather than to the caller.
+    * `:intra_threads` (default `0`, onnxruntime's own) and `:intra_op_spinning`
+      (default `false`) -
+      onnxruntime thread-pool shape. The defaults stop its workers from spin-waiting
+      through an inference that the NPU is doing; see `qnn_opts/1`.
 
   ## Performance
 
@@ -353,7 +357,30 @@ defmodule Example.Yolo do
   def qnn_opts(opts \\ []) do
     base = [
       htp_arch: Keyword.get(opts, :htp_arch, 68),
-      htp_performance_mode: Keyword.get(opts, :htp_performance_mode, "burst")
+      htp_performance_mode: Keyword.get(opts, :htp_performance_mode, "burst"),
+      # Do not let onnxruntime's intra-op pool spin-wait while the HTP works. Its
+      # workers spin before parking because that is right for CPU graphs of many
+      # tiny kernels; with the whole graph on one ~33 ms accelerator node they spin
+      # through the entire inference. Measured: ~6 ARM cores pinned (539% of wall),
+      # cpu0 89 degC, cpufreq cooling state at 9/9, throughput decaying 24 -> 20.6
+      # fps as the package throttled - and the NPU throttling along with it.
+      #
+      # IMPORTANT: this only pays off with the cpufreq governor set to
+      # `performance`. The spinning was doubling as an accidental governor - it
+      # kept the cores loaded so schedutil clocked them up. Remove it under
+      # schedutil and they idle at 691 MHz, which HALVES throughput (29.2 -> 20.6
+      # fps). Measured on bus.jpg, 30 iterations each:
+      #
+      #   spin=ON  schedutil     27.9 fps   539% cpu   1958/1900/806 MHz
+      #   spin=OFF schedutil     20.6 fps    52% cpu    691/691/806 MHz
+      #   spin=OFF performance   29.2 fps    27% cpu   1958/2400/2707 MHz  <-- this
+      #
+      # Same throughput for a twentieth of the CPU. Example.Soak sets the governor;
+      # if you use this module directly under a sustained load, set it too.
+      # intra_threads is left at onnxruntime's default: under `performance` it is
+      # noise (0/2/4/8 all land within 27-30 fps).
+      intra_threads: Keyword.get(opts, :intra_threads, 0),
+      intra_op_spinning: Keyword.get(opts, :intra_op_spinning, false)
     ]
 
     base = if path = Keyword.get(opts, :trace_path), do: [{:trace_path, path} | base], else: base

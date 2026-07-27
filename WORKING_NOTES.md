@@ -567,43 +567,50 @@ cargo's own environment in `shell.nix` (`CARGO_BUILD_TARGET` plus the per-target
 host-side `CC_x86_64_*` overrides), so both Mix paths agree regardless of config visibility.
 Regression-tested by touching `lib/ortex.ex` and running plain `mix compile`.
 
-### Overnight soak in progress — started 2026-07-27 ~01:50 UTC
+### Overnight soak, and the spin-wait fix: 20x less CPU, no throttling, +40% sustained fps
 
 `Example.Soak` runs inference back-to-back forever and appends one row per minute to
-**`/data/soak.csv`** (51 columns): fps / mean / min / max / errors for that interval only, all 34
-thermal zones in millidegrees, 3 cpufreq policies, and the 4 cooling devices' `cur_state`.
-Read it with `Example.Soak.summary()`; stop with `Example.Soak.disable()`.
+**`/data/soak.csv`** (53 columns): fps / mean / min / max / errors for that interval, `governor`,
+all 34 thermal zones in millidegrees, 3 cpufreq policies, and the 4 cooling devices' `cur_state`.
+`sys_uptime_s` alongside `uptime_s` is how you tell a board reboot (sys drops) from a soak-process
+restart (sys keeps climbing, soak resets). Read with `Example.Soak.summary()`, stop with
+`Example.Soak.disable()`. Auto-resumes across reboots via `/data/soak.enabled` — verified in anger.
 
-It survives reboots by design: `enable/1` writes `/data/soak.enabled` and `Example.Application`
-restarts the soak at boot whenever that file exists. Already proved itself — the device rebooted
-during setup and the log shows `Soak flag present; resuming soak`.
+**Measured comparison, same board, same frame, same model.** Baseline was 20 minutes of the shipped
+default; the fixed configuration is the overnight run:
 
-Three things that had to be got right, each of which had already bitten once:
+| | fps | cpu0 | nspss0 (NPU) | ddr | skin | cpufreq cooling state |
+|---|---|---|---|---|---|---|
+| **before** — spin=ON, schedutil | 24.0 -> **20.6**, decaying | 88-89.6 | 83.3 -> **90.3** | 84.9-87.2 | 73-76.9 | **9/9, 9/9, 10/10 saturated** |
+| **after** — spin=OFF, performance | **27.7-30.8**, flat | 64.5-68.4 | 71.6-76.3 | 64-68 | 58-61.5 | **0/0/0 — never engaged** |
 
-* **Start it under the application supervisor, not `start_link` from the IEx session.** Linking to an
-  SSH session means closing the terminal ends the overnight run.
-* **`:transient`, and stop via `Supervisor.terminate_child`.** A `:permanent` child would be restarted
-  by the supervisor immediately after `disable/0` stopped it.
-* **Rows are written with `:sync`.** An unclean reset cost exactly the header and the first data row
-  from an unflushed page cache; `ensure_header` now also rotates a headerless file aside rather than
-  appending a header mid-file.
+Process CPU went from **539% of wall across 7 threads to 43% of one core across 1**. Per-thread
+sampling is what identified the culprit: 7 consecutive tids all named `erts_dios_2`, which are
+onnxruntime's intra-op pool threads inheriting the BEAM dirty-IO scheduler's `comm` (Linux pthreads
+keep the parent's name unless they set their own).
 
-`init/1` never fails hard — it retries setup every 15 s — because the CDSP can still be establishing
-its FastRPC session at boot, and a stopping child would put the whole application into a restart loop
-unattended.
+**The non-obvious part, and a correction to my own hypothesis.** I assumed the spinning was pure waste
+and disabling it would be free. It is not: spinning doubles as an accidental **cpufreq governor**.
+With it off under schedutil there is no load for the governor to react to, the cores park at 691 MHz,
+and every CPU-side segment and FastRPC dispatch takes twice as long — throughput *halves*. The fix is
+both changes together:
 
-**Already visible in the first two samples, and it is the headline for tomorrow: the board throttles
-hard and fast.** At t=60 s cpu0 88.4 degC, nspss0 83.3, ddr 84.9, skin 73.3, cooling state 6/9 on all
-three cpufreq domains, 24.0 fps. At t=120 s: nspss0 84.1, skin 74.2, cooling state **7/9**,
-22.65 fps. Idle was 37-41 degC. So the overnight numbers will mostly describe the *throttled* steady
-state — which is the useful number for a real deployment, but it is not the 27-31 fps that
-`bench/2` reports in a short burst.
+```
+spin=ON  schedutil     27.9 fps   539% cpu   1958/1900/806 MHz   71.6 degC
+spin=OFF schedutil     20.6 fps    52% cpu    691/691/806 MHz    60.6 degC
+spin=OFF performance   29.2 fps    27% cpu   1958/2400/2707 MHz  62.2 degC  <-- shipped
+spin=OFF perf+pmqos=0  30.2 fps    37% cpu   1958/2400/2707 MHz  64.9 degC
+```
 
-Worth trying next, and probably a real win: most of that heat is ARM, not NPU. ONNX Runtime's thread
-pool **spin-waits** while the HTP computes (~6 cores at 100% for a 32 ms inference, see the
-CPU%-of-wall note above), so the cores are burning power doing nothing and then throttling the whole
-package. Capping the EP's intra-op threads should cut CPU temperature and may well *raise* sustained
-NPU throughput by keeping the die out of thermal limit.
+PM QoS (`/dev/cpu_dma_latency` = 0) on its own does nothing (17.9 fps) — deep idle was never the
+problem, frequency was. `intra_threads` is noise under `performance` (0/2/4/8 all 27-30 fps), so it
+stays at onnxruntime's default. Ship: `intra_op_spinning: false` + governor `performance`, both
+defaulted in `Example.Yolo.qnn_opts/1` and `Example.Soak` respectively.
+
+Why onnxruntime spins at all: its pool descends from Eigen's non-blocking pool, built for CPU graphs
+of hundreds of few-microsecond kernels where a futex wake (~5-50us) costs more than the kernel itself.
+Correct default there; pathological when the graph is one 33 ms accelerator node on a passively cooled
+SoC, where the spinning heats the package and throttles the NPU that is doing the actual work.
 
 ### The loading recipe (all of this remains correct)
 

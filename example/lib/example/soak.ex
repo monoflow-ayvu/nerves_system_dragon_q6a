@@ -22,13 +22,20 @@ defmodule Example.Soak do
     * `run_started_at`, `sampled_at` - wall clock. Note that early rows can carry
       a wrong wall time: NTP has not necessarily synced when the app starts, so
       trust `uptime_s` for ordering and use `run_started_at` to group a run.
-    * `uptime_s`, `elapsed_s`
+    * `uptime_s` - seconds since the *current soak process* started.
+    * `sys_uptime_s` - seconds since the *board* booted. A drop here means the device
+      restarted and the soak auto-resumed; `uptime_s` restarting from 0 while
+      `sys_uptime_s` keeps climbing means only the soak process restarted.
+    * `elapsed_s` - length of the interval this row covers.
     * `iters`, `fps`, `mean_us`, `min_us`, `max_us`, `errors` - inference in the
       last interval only, so throttling shows up as a falling `fps` over the night.
     * one column per thermal zone, in millidegrees C, named after the zone's own
       `type` - including `nspss0-thermal`/`nspss1-thermal`, which are the Hexagon
       NSP subsystem the NPU runs on, and `msm-skin-thermal`, the closest thing to
       a case temperature.
+    * `governor` - the cpufreq governor in effect. `performance` is set on start
+      and the previous value restored on stop; see `set_governor/1` for why that is
+      load-bearing rather than cosmetic.
     * `cpufreq_policyN` - current kHz per policy.
     * `cool_<device>` - `cur_state` of each cooling device (`cpufreq-cpu0/4/7`,
       `devfreq-3d00000.gpu`). These are the direct evidence of throttling: they
@@ -179,6 +186,7 @@ defmodule Example.Soak do
       zones = discover_zones()
       cooling = discover_cooling()
       ensure_header(zones, cooling)
+      previous_governor = set_governor(Keyword.get(opts, :governor, "performance"))
 
       workers =
         for _ <- 1..Keyword.get(opts, :workers, 1), do: spawn_worker(session.ortex, frame.input)
@@ -203,6 +211,7 @@ defmodule Example.Soak do
          session: session,
          frame: frame,
          workers: workers,
+         previous_governor: previous_governor,
          acc: new_acc(),
          totals: %{iters: 0, errors: 0, samples: 0}
        }}
@@ -283,7 +292,30 @@ defmodule Example.Soak do
   @impl true
   def terminate(_reason, state) do
     Enum.each(Map.get(state, :workers, []), &Process.exit(&1, :kill))
+    if g = Map.get(state, :previous_governor), do: set_governor(g)
     :ok
+  end
+
+  # The cpufreq governor is what makes disabling onnxruntime's spin-wait a win
+  # rather than a 43% throughput loss: without spinning there is no CPU load for
+  # schedutil to react to, so the cores sit at 691 MHz and every CPU-side segment
+  # and RPC dispatch takes twice as long. Under `performance` we get the spinning
+  # configuration's throughput for a twentieth of its CPU. Restored on stop.
+  defp set_governor(nil), do: nil
+
+  defp set_governor(governor) do
+    paths = Path.wildcard("/sys/devices/system/cpu/cpufreq/policy*/scaling_governor")
+    previous = paths |> Enum.map(&read_trim/1) |> Enum.reject(&is_nil/1) |> List.first()
+
+    Enum.each(paths, fn path ->
+      case File.write(path, governor) do
+        :ok -> :ok
+        {:error, reason} -> Logger.warning("Could not set #{path} to #{governor}: #{inspect(reason)}")
+      end
+    end)
+
+    if previous != governor, do: Logger.info("cpufreq governor: #{previous} -> #{governor}")
+    previous
   end
 
   ## Inference loop
@@ -336,13 +368,15 @@ defmodule Example.Soak do
         DateTime.to_iso8601(state.started),
         DateTime.to_iso8601(DateTime.utc_now()),
         div(now_mono - state.started_mono, 1000),
+        system_uptime_s(),
         div(interval_ms, 1000),
         acc.iters,
         fps,
         if(acc.iters > 0, do: div(acc.sum_us, acc.iters), else: 0),
         acc.min_us || 0,
         acc.max_us || 0,
-        acc.errors
+        acc.errors,
+        read_trim("/sys/devices/system/cpu/cpufreq/policy0/scaling_governor") || ""
       ] ++
         Enum.map(state.zones, fn {_name, path} -> read_int(path) end) ++
         Enum.map(cpufreq_paths(), &read_int/1) ++
@@ -367,7 +401,7 @@ defmodule Example.Soak do
 
     header =
       Enum.join(
-        ~w(run_started_at sampled_at uptime_s elapsed_s iters fps mean_us min_us max_us errors) ++
+        ~w(run_started_at sampled_at uptime_s sys_uptime_s elapsed_s iters fps mean_us min_us max_us errors governor) ++
           Enum.map(zones, fn {name, _} -> name end) ++
           Enum.map(cpufreq_paths(), &("cpufreq_" <> (&1 |> Path.split() |> Enum.at(-2)))) ++
           Enum.map(cooling, fn {name, _} -> "cool_" <> name end),
@@ -379,12 +413,13 @@ defmodule Example.Soak do
         append(header)
 
       {:ok, contents} ->
-        # A file whose first line is not the header cannot be parsed tomorrow.
-        # This is reachable: the header is written at startup, and an unclean
-        # reset before the filesystem flushed it left a file of data rows with no
-        # header at all. Move that aside rather than appending a header mid-file.
-        unless String.starts_with?(contents, "run_started_at,") do
-          File.rename(@csv, @csv <> ".unheadered-" <> Integer.to_string(System.os_time(:second)))
+        # Rotate unless the existing first line is EXACTLY this header. Two ways to
+        # get here: an unclean reset before the filesystem flushed left a file of
+        # data rows with no header at all, and adding a column changes the schema -
+        # in which case appending would silently produce a file with two different
+        # row widths and no way to tell which is which.
+        if String.split(contents, "\n") |> hd() != header do
+          File.rename(@csv, @csv <> ".old-" <> Integer.to_string(System.os_time(:second)))
           append(header)
         end
     end
@@ -422,6 +457,17 @@ defmodule Example.Soak do
 
   defp cpufreq_paths do
     Path.wildcard("/sys/devices/system/cpu/cpufreq/policy*/scaling_cur_freq") |> Enum.sort()
+  end
+
+  # Seconds since the board booted, straight from /proc/uptime. This is the column
+  # that tells you whether the device restarted mid-run: it climbs monotonically and
+  # DROPS across a reboot, whereas the wall clock can be wrong before NTP syncs and
+  # `uptime_s` only measures the current soak process.
+  defp system_uptime_s do
+    case read_trim("/proc/uptime") do
+      nil -> ""
+      s -> s |> String.split() |> hd() |> String.to_float() |> trunc()
+    end
   end
 
   defp read_trim(path) do
