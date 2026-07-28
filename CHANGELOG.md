@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.7.0
+
+Venus video (VPU) enablement plus software encoders. Layout unchanged
+since v0.6.0 — OTA from any v0.6.x is safe.
+
+- **Venus firmware fixed (M3).** `qcom/vpu-2.0/venus.mbn` now points at
+  `vpu20_p1.mbn` (VPU-2.0 Gen1) instead of the VPU-1.0 `vpu20_p4.mbn`
+  that PAS/TZ rejects — the driver died at core reset and no
+  `/dev/video*` ever appeared. Decode through the VPU (MPEG-2/H.264)
+  now works out of the box. `vpu20_p4.mbn` dropped (−1.9 MB/slot).
+- **UEFI `HypervisorOverride` auto-enabled at boot**
+  (`rootfs_overlay/usr/sbin/qcom-uefi-vars.sh`, run from
+  `qcom-coldplug.sh`). Without it, any venus encode job hard-resets the
+  SoC (PSHOLD warm reset from the hypervisor/TZ). With it, **H.264
+  1080p VPU encode works at ~87 fps**. Still broken at venus firmware
+  level: 720p H.264 and all HEVC encode stall with zero frames. The
+  variable is a one-shot trigger (firmware applies it and resets the
+  visible value to 0), so the script keys on a
+  `/root/.hypervisor-override-requested@<bios_version>` marker and
+  reboots once; `docs/BOARD_QUIRKS.md` §10 documents the full efivarfs
+  procedure (4-byte attrs `NV|BS|RT` are part of the write, `chattr -i`
+  first, single `write()`).
+- **Software H.264/HEVC encode**: `x264` and `x265` packages added —
+  ffmpeg auto-enables `libx264`/`libx265` (`FFMPEG_GPL=y`). Measured
+  on-board with the previously shipped encoders: MPEG-4 1080p 87 fps,
+  MPEG-2 94 fps. Fragmented MP4 needs no package: `mov` muxer with
+  `-movflags frag_keyframe+empty_moov+default_base_moof`.
+- **Downloads**: `BR2_PRIMARY_SITE="https://sources.buildroot.net"` —
+  x265's upstream (bitbucket downloads) is dead and the nerves backup
+  mirror 403s what it doesn't carry.
+- Example: ortex pinned by tag (`v0.2.0-rc.2`) instead of a raw commit.
+
 ## v0.6.1
 
 Patch release with no functional system changes; exists to exercise
