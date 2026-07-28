@@ -21,6 +21,9 @@ BR2_TAR_OPTIONS="--no-same-owner"
 BR2_CCACHE=y
 BR2_CCACHE_DIR="/nerves/env/nerves_system_dragon_q6a/.ccache"
 BR2_CCACHE_INITIAL_SETUP="--max-size=4G"
+# Tried before each package's own site: some upstreams rot (x265's bitbucket
+# downloads are dead) while the nerves backup mirror 403s what it lacks.
+BR2_PRIMARY_SITE="https://sources.buildroot.net"
 BR2_BACKUP_SITE="https://dl.nerves-project.org"
 BR2_ENABLE_DEBUG=y
 BR2_GLOBAL_PATCH_DIR="${BR2_EXTERNAL_NERVES_PATH}/patches ${NERVES_DEFCONFIG_DIR}/patches"
