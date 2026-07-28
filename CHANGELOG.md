@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6.1
+
+Patch release with no functional system changes (same `package_files`
+content as v0.6.0); exists to exercise the CI ccache warm-build path
+end to end.
+
+- Example: ortex pinned by git tag (`v0.2.0-rc.2`) instead of a raw
+  commit ref.
+- Repo: Renovate configured.
+
 ## v0.6.0
 
 Bringing the system to parity with the hardware-proven `radxa-q6a-yocto`
