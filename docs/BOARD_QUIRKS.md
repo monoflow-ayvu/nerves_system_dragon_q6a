@@ -516,7 +516,56 @@ them would need a history rewrite.
 Firmware size with the QNN runtime shipped: **286 MB**, against a 4 GiB slot (`assert-size-lte` guards
 it).
 
-## 10. Open questions
+## 10. UEFI variables from Linux (efivarfs)
+
+Board setup lives in UEFI variables on the SPI NOR, writable from Linux. Required for VPU encode:
+`HypervisorOverride` must be **Enabled** or any venus encode job hard-resets the SoC (PSHOLD warm
+reset from the hypervisor/TZ; decode works regardless).
+
+**The variable is a one-shot trigger, not a state flag.** Writing 1 makes the firmware apply the
+override into its own config store at the next boot, RESET the visible variable back to 0, and
+sometimes reboot itself once more to apply. It therefore reads 0 while the override is active —
+never key logic on its value. `rootfs_overlay/usr/sbin/qcom-uefi-vars.sh` (from
+`qcom-coldplug.sh`) handles this: it writes the trigger once per (device × boot-firmware) lifetime,
+tracked by a marker file `/root/.hypervisor-override-requested@<bios_version>` (the version tag
+re-arms the trigger automatically if a boot-firmware update resets hypervisor config), then reboots.
+
+The variable:
+
+```
+HypervisorOverride-e9139283-6a58-402f-b397-4c4671c9e067   uint32 LE: write 1 to arm the override
+```
+
+Procedure (busybox sh — no `od`/`hexdump`/`cmp`/`md5sum` on the board; read single bytes with `dd`
+and compare against `$(printf '\001')` — `$()` strips NULs, so byte 0 reads as "" and byte 1 as
+"\001"):
+
+```sh
+mount -t efivarfs efivarfs /sys/firmware/efi/efivars   # if not already mounted
+VAR=/sys/firmware/efi/efivars/HypervisorOverride-e9139283-6a58-402f-b397-4c4671c9e067
+
+# Read: file = 4 attribute bytes + value.
+dd if=$VAR bs=1 skip=4 count=1 2>/dev/null             # empty = 0, ^A = 1
+
+# Write (the enable trigger):
+chattr -i $VAR                                          # kernel marks efivarfs entries immutable
+printf '\007\000\000\000\001\000\000\000' > $VAR        # attrs(4) + uint32 1, ONE write()
+```
+
+Rules that are easy to get wrong:
+
+* **The 4 attribute bytes are part of the write.** `0x00000007` = `NON_VOLATILE | BOOTSERVICE_ACCESS
+  | RUNTIME_ACCESS`. Omit them and the variable is created with attributes 0 — volatile, and often
+  ignored by the firmware.
+* **Single write() of attrs+value.** A shell `>` redirection is one write; two appends corrupt it.
+* **`chattr -i` first** or the write fails with EPERM ("not owner").
+* **EDK2 reads setup variables only at boot** — changes apply on the *next* boot.
+
+Measured with the override active (2026-07-28, venus p1 firmware): H.264 encode 1080p ~87 fps,
+640×480 ~280 fps, 320×240 ~580 fps; 720p H.264 and HEVC (any size) still stall with zero frames —
+venus firmware limits, not the override. Decode works with or without it.
+
+## 11. Open questions
 
 * **Prove or kill the FastRPC-domain-teardown hypothesis** (§3). It got *stronger*: a board reset was
   triggered by starting `qnn-probe` — a **separate OS process** — while the BEAM held live QNN sessions.

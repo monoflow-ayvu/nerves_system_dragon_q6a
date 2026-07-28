@@ -29,6 +29,11 @@ if [ -e "$OPS_FW" ] && [ -e /dev/rootdisk0 ] && [ -x /usr/bin/fwup ]; then
     /usr/bin/fwup -q -t autovalidate -d /dev/rootdisk0 "$OPS_FW" || true
 fi
 
+# 0.5 UEFI variables. HypervisorOverride must be Enabled or VPU encode
+#     hard-resets the SoC (see docs/BOARD_QUIRKS.md "UEFI variables").
+#     Idempotent; reboots once on the first boot that flips it.
+/usr/sbin/qcom-uefi-vars.sh || true
+
 # 1. Dynamic device management (eudev). Start the daemon and coldplug.
 if [ -x /sbin/udevd ] || [ -x /usr/sbin/udevd ]; then
     mkdir -p /run/udev
