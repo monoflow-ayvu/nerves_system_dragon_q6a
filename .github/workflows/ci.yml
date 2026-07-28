@@ -83,7 +83,7 @@ jobs:
       # saves in the post-job phase, which also runs on failure — a failed
       # build still leaves a warm cache for the retry.
       - name: Cache buildroot ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .ccache
           # mix.lock pins the nerves_toolchain and nerves_system_br versions;
@@ -137,7 +137,7 @@ jobs:
       # artifact resolver validate it and populate its cache itself (it writes
       # the CHECKSUM file that Cache.valid? checks).
       - name: Restore built system artifact
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: deploy/system
           key: deploy/system-${{ github.sha }}-${{ github.ref_name }}
