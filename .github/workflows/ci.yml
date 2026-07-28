@@ -52,6 +52,10 @@ jobs:
   build-system:
     needs: [get-br-dependencies]
     runs-on: ubuntu-22.04
+    env:
+      # Never resolve this repo's own published artifact — always build
+      # (see artifact_sites() in mix.exs).
+      FORCE_SYSTEM_BUILD: "1"
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main

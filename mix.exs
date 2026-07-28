@@ -39,9 +39,7 @@ defmodule NervesSystemDragonQ6a.MixProject do
   defp nerves_package do
     [
       type: :system,
-      artifact_sites: [
-        {:github_releases, "monoflow-ayvu/#{@app}"}
-      ],
+      artifact_sites: artifact_sites(),
       build_runner: Nerves.Artifact.BuildRunners.Docker,
       build_runner_config: [
         docker: {"Dockerfile", "fermuch/nerves-dragon-q6a-builder:latest"}
@@ -66,6 +64,19 @@ defmodule NervesSystemDragonQ6a.MixProject do
       ],
       checksum: package_files()
     ]
+  end
+
+  # Downstream projects resolve the prebuilt system from GitHub Releases.
+  # CI's build-system job sets FORCE_SYSTEM_BUILD=1 to strip the sites: the
+  # repo must actually compile itself — otherwise a published release with
+  # an identical checksum makes `mix compile` a no-op and the later
+  # `mix nerves.artifact` (make system) dies on the missing build tree.
+  defp artifact_sites do
+    if System.get_env("FORCE_SYSTEM_BUILD") do
+      []
+    else
+      [{:github_releases, "monoflow-ayvu/#{@app}"}]
+    end
   end
 
   defp deps do
