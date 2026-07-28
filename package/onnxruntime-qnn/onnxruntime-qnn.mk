@@ -27,7 +27,11 @@ ONNXRUNTIME_QNN_INSTALL_STAGING = YES
 # it is loaded onto the DSP over FastRPC and never runs on the ARM cores. Buildroot's
 # check-bin-arch rejects the whole package without this. Same treatment as
 # QAIRT_RUNTIME_BIN_ARCH_EXCLUDE for /usr/lib/dsp.
-ONNXRUNTIME_QNN_BIN_ARCH_EXCLUDE = /usr/lib/onnxruntime-qnn/libQnnHtpV68Skel.so
+# NOTE: check-bin-arch turns every -i into a DIRECTORY prefix (it appends a
+# trailing slash), so excluding the skel by filename never matches - exclude
+# the whole onnxruntime-qnn lib dir. The big AArch64 libonnxruntime lives one
+# level up in /usr/lib and stays checked.
+ONNXRUNTIME_QNN_BIN_ARCH_EXCLUDE = /usr/lib/onnxruntime-qnn
 
 # The Rust NIF links against libonnxruntime at build time when not using
 # ort's load-dynamic; staging makes the .so available to the cross toolchain.
