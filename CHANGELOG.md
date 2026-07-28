@@ -2,9 +2,9 @@
 
 ## v0.6.1
 
-Patch release with no functional system changes (same `package_files`
-content as v0.6.0); exists to exercise the CI ccache warm-build path
-end to end.
+Patch release with no functional system changes; exists to exercise
+the CI ccache warm-build path end to end. (The artifact checksum still
+changes because VERSION is part of `package_files`.)
 
 - Example: ortex pinned by git tag (`v0.2.0-rc.2`) instead of a raw
   commit ref.
