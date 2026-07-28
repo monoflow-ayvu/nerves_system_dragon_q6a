@@ -22,7 +22,7 @@ jobs:
       # covers blobs/) must see identical content in every job or the seeded
       # prebuilt system is rejected as stale and the smoke job tries to
       # rebuild buildroot from source.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: mathio/gha-cleanup@v1
@@ -75,7 +75,7 @@ jobs:
       # covers blobs/) must see identical content in every job or the seeded
       # prebuilt system is rejected as stale and the smoke job tries to
       # rebuild buildroot from source.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: gridpoint-com/actions-nerves-system@v1
@@ -126,7 +126,7 @@ jobs:
       # covers blobs/) must see identical content in every job or the seeded
       # prebuilt system is rejected as stale and the smoke job tries to
       # rebuild buildroot from source.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: gridpoint-com/actions-nerves-system@v1
@@ -201,7 +201,7 @@ jobs:
       # covers blobs/) must see identical content in every job or the seeded
       # prebuilt system is rejected as stale and the smoke job tries to
       # rebuild buildroot from source.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: gridpoint-com/actions-nerves-system@v1
