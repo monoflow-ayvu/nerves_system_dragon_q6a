@@ -41,6 +41,13 @@ jobs:
           # cap). This system ships via GitHub Releases, not hex.pm, so the
           # hex-package validation is moot.
           hex-validate: false
+          # The shared action saves ~/.nerves/dl as nerves-dl-<ref>-<sha> — a
+          # fresh ~1.7 GB entry per commit that restore-keys never picks
+          # (they always shadow to the newest), so under the 10 GB/repo cap
+          # these entries just evict br-ccache within a couple of runs.
+          # Restore still works via the action's restore-keys fallbacks
+          # (nerves-dl-<ref>, nerves-dl-main, nerves-dl).
+          save-dl-cache: false
 
   build-system:
     needs: [get-br-dependencies]
