@@ -6,7 +6,7 @@ env:
   OTP_VERSION: 28.0.1
   ELIXIR_VERSION: 1.18.4-otp-28
   NERVES_BOOTSTRAP_VERSION: 1.13.1
-  FWUP_VERSION: 1.13.1  # matches Dockerfile; used by the qemu-smoke job
+  FWUP_VERSION: 1.16.0  # matches Dockerfile and the target fwup; fwup.conf requires >= 1.14.0
 
 permissions:
   id-token: write
@@ -16,7 +16,15 @@ jobs:
   get-br-dependencies:
     runs-on: ubuntu-22.04
     steps:
+      # lfs: true is load-bearing: the QNN runtime blobs under blobs/ are LFS
+      # objects. A pointer checkout ships 131-byte pointer text files as
+      # "libraries" in the image, and the example's artifact checksum (which
+      # covers blobs/) must see identical content in every job or the seeded
+      # prebuilt system is rejected as stale and the smoke job tries to
+      # rebuild buildroot from source.
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: mathio/gha-cleanup@v1
         with:
           remove-browsers: true
@@ -50,7 +58,15 @@ jobs:
           swap-storage: true
       # needed for the docker nerves build runner
       - run: mkdir -p /home/runner/.ssh
+      # lfs: true is load-bearing: the QNN runtime blobs under blobs/ are LFS
+      # objects. A pointer checkout ships 131-byte pointer text files as
+      # "libraries" in the image, and the example's artifact checksum (which
+      # covers blobs/) must see identical content in every job or the seeded
+      # prebuilt system is rejected as stale and the smoke job tries to
+      # rebuild buildroot from source.
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: gridpoint-com/actions-nerves-system@v1
       # ccache is wired in nerves_defconfig (BR2_CCACHE_DIR points into the
       # bind-mounted checkout) because the action's BR2_CCACHE* env exports
@@ -93,7 +109,15 @@ jobs:
     env:
       NERVES_DL_DIR: /home/runner/nerves-dl
     steps:
+      # lfs: true is load-bearing: the QNN runtime blobs under blobs/ are LFS
+      # objects. A pointer checkout ships 131-byte pointer text files as
+      # "libraries" in the image, and the example's artifact checksum (which
+      # covers blobs/) must see identical content in every job or the seeded
+      # prebuilt system is rejected as stale and the smoke job tries to
+      # rebuild buildroot from source.
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: gridpoint-com/actions-nerves-system@v1
       - uses: ./.actions/.internal/setup-beam-nerves
         with:
@@ -160,7 +184,15 @@ jobs:
     permissions:
       contents: write
     steps:
+      # lfs: true is load-bearing: the QNN runtime blobs under blobs/ are LFS
+      # objects. A pointer checkout ships 131-byte pointer text files as
+      # "libraries" in the image, and the example's artifact checksum (which
+      # covers blobs/) must see identical content in every job or the seeded
+      # prebuilt system is rejected as stale and the smoke job tries to
+      # rebuild buildroot from source.
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: gridpoint-com/actions-nerves-system@v1
       - name: Deploy nerves_system
         uses: ./.actions/deploy-system
