@@ -7,6 +7,10 @@ env:
   ELIXIR_VERSION: 1.18.4-otp-28
   NERVES_BOOTSTRAP_VERSION: 1.13.1
   FWUP_VERSION: 1.16.0  # matches Dockerfile and the target fwup; fwup.conf requires >= 1.14.0
+  # Tried before each package's own site. Needed because some upstreams rot
+  # (x265's bitbucket downloads are dead) while the nerves backup mirror
+  # (BR2_BACKUP_SITE in nerves_defconfig) 403s what it doesn't carry.
+  BR2_PRIMARY_SITE: https://sources.buildroot.net
 
 permissions:
   id-token: write
