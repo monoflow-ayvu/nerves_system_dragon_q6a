@@ -14,8 +14,10 @@ defmodule Example.MixProject do
   @version "0.1.0"
   @all_targets [:dragon_q6a]
 
-  # github.com/monoflow-ayvu/ortex main @ 2026-07-27
-  @ortex_ref "313c46777fc4656942fe94e0e57d7be08b7af738"
+  # github.com/monoflow-ayvu/ortex v0.2.0-rc.2 — has rustler_precompiled
+  # wiring, so CI (no cargo on the runner) fetches the prebuilt NIF from the
+  # release instead of compiling the crate.
+  @ortex_ref "8a1df62c894aeaf1ad5a020c8f134bc3bb300205"
 
   def project do
     [
