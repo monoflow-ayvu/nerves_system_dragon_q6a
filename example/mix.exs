@@ -17,7 +17,7 @@ defmodule Example.MixProject do
   # github.com/monoflow-ayvu/ortex v0.2.0-rc.2 — has rustler_precompiled
   # wiring, so CI (no cargo on the runner) fetches the prebuilt NIF from the
   # release instead of compiling the crate.
-  @ortex_ref "8a1df62c894aeaf1ad5a020c8f134bc3bb300205"
+  @ortex_tag "v0.2.0-rc.2"
 
   def project do
     [
@@ -66,7 +66,7 @@ defmodule Example.MixProject do
       #
       # monoflow-ayvu/ortex is public, so the plain github: form fetches over
       # unauthenticated https — which is all the CI runner has (no deploy key).
-      {:ortex, github: "monoflow-ayvu/ortex", ref: @ortex_ref, override: true},
+      {:ortex, github: "monoflow-ayvu/ortex", tag: @ortex_tag, override: true},
       {:nx, "~> 0.6"},
 
       # XLA-backed Nx. Needed because BinaryBackend evaluates elementwise and
