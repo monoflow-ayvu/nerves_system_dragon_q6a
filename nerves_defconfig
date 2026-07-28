@@ -204,3 +204,8 @@ BR2_PACKAGE_FFMPEG=y
 BR2_PACKAGE_FFMPEG_GPL=y
 BR2_PACKAGE_FFMPEG_SWSCALE=y
 BR2_PACKAGE_FFMPEG_FFPROBE=y
+# Software encode (VPU encode only works <= 480p today): H.264 + HEVC.
+# ffmpeg.mk auto-enables --enable-libx264/--enable-libx265 when these are
+# set and FFMPEG_GPL=y.
+BR2_PACKAGE_X264=y
+BR2_PACKAGE_X265=y
