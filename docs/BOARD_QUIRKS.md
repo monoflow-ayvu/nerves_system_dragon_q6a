@@ -570,11 +570,67 @@ Rules that are easy to get wrong:
 * **EDK2 reads setup variables only at boot** — changes apply on the *next* boot, and no sooner is
   ever required (see the A/B-validation note above).
 
-Measured with the override active (2026-07-28, venus p1 firmware): H.264 encode 1080p ~87 fps,
-640×480 ~280 fps, 320×240 ~580 fps; 720p H.264 and HEVC (any size) still stall with zero frames —
-venus firmware limits, not the override. Decode works with or without it.
+Vendor variable inventory (`-e9139283-6a58-402f-b397-4c4671c9e067` = Radxa/QCS6490 platform GUID,
+`-882f8c2b-9646-435f-8de5-f208ff80c1bd` = boot/devicetree family). No "applied" status variable
+exists for the hypervisor — the trigger below is the only hypervisor knob:
 
-## 11. Open questions
+```
+HypervisorOverride            uint32 write-1 trigger: enable hypervisor override (VPU encode)
+QUPV3_{0,1}_SE{0,2,4,6,7}_Mode  QUPv3 serial-engine modes
+BlueUserLED, SynchronousDebugUART, WindowsCamera{PlatformState,ConfigPreset},
+WindowsRhProxy, Pcie{0,1}ControllerEnabled,
+RemoteProcPreloadFeature, RemoteProc{ADSP,CDSP}Preload
+882f8c2b family: DisableBootOrder, LoadDeviceTree, DeviceTreeAutoFixup,
+  DeviceTreeVersion, DeviceTreeVersionDetect, RTCInfo, RunCycles, DisplayPpiFlag
+```
+
+**Reading the applied state from Elixir.** efivarfs is already mounted every boot
+(`qcom-uefi-vars.sh` mounts it first thing). The trigger var reads 0 both when never armed and when
+applied, so infer from the marker instead: the override is applied iff the marker file predates the
+current boot (`File.stat(marker).mtime < System.system_time(:second) - uptime`), because the
+firmware consumes the trigger at boot start. Reading any var is trivial:
+
+```elixir
+with {:ok, <<attrs::little-unsigned-32, value::binary>>} <-
+       File.read("/sys/firmware/efi/efivars/<Name>-<guid>") do
+  {:ok, attrs, value}   # attrs = 7 (NV|BS|RT); value is raw LE bytes
+end
+```
+
+Writing from Elixir follows the same rules as the shell: payload must start with the 4 attr bytes
+(`<<7::little-32, 1::little-32>>`), `chattr -i` first via `System.cmd("chattr", ["-i", path])`,
+single `File.write!` call. Ground truth for "is the override actually working" remains a tiny
+`h264_v4l2m2m` encode probe (~2 s), since no variable reports it.
+
+## 11. Venus (VPU) behavior matrix
+
+Measured 2026-07-28/29, venus p1 firmware, HypervisorOverride applied, ffmpeg 6.1.5.
+
+| Test | Result |
+|---|---|
+| Decode H.264/MPEG-2 1080p, 1 session | works (copy-back ~190-260 fps; SW decode is faster for these light codecs) |
+| Encode H.264 320×240 / 640×480, 1 session | works, ~580 / ~280 fps |
+| **Encode H.264 1080p, 1 session** | **works at ~87-90 fps — on SOME boots; on others it hard-wedges the SoC** (watchdog reset) |
+| Encode H.264 720p, any session | stalls, zero frames |
+| Encode HEVC, any size | stalls, zero frames |
+| Encode 2× 480p concurrently | works, ~154 fps each |
+| **Encode 2× 1080p concurrently** | **wedges both sessions; board resets** |
+
+Failure semantics that matter operationally:
+
+* **Stalled sessions poison the VPU for the rest of the boot.** After any stall, every later session
+  (any codec/size) stalls too; `rmmod`/`modprobe` of venus_* does NOT clear it — only a full reset
+  (reboot) does.
+* **/dev/video node roles swap between boots** (video0=encoder one boot, decoder the next). Never
+  hardcode node numbers; ffmpeg's v4l2m2m wrapper probes both and picks correctly.
+* The 1080p boot-lottery makes single-1080p encode unusable unattended today; 480p and SW encode
+  (x264/mpeg4) are the dependable paths. Related upstream: kodiak/sc7280 GDSC/secure-context saga
+  (linux-media, Jul 2026) and Radxa forum "Gstreamer encoder usage reboot the board".
+
+10 h soak (two concurrent encoders: VPU 480p H.264 + SW 1080p MPEG-4, `/data/encoding.csv`): VPU flat
+at 297-304 fps, SW 45-48 fps, cpu_max plateau ~94.6 °C, NSP ~95 °C — no throttle, no drift.
+
+## 12. Open questions
 
 * **Prove or kill the FastRPC-domain-teardown hypothesis** (§3). It got *stronger*: a board reset was
   triggered by starting `qnn-probe` — a **separate OS process** — while the BEAM held live QNN sessions.
