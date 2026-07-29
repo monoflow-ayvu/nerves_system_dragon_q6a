@@ -16,6 +16,13 @@
 #     (device x boot-firmware) lifetime.
 #   - The marker carries the SPI firmware version so a boot-firmware
 #     update (which can reset hypervisor config) re-arms the trigger.
+#   - DO NOT reboot here. This script can run in the first boot of an
+#     UNVALIDATED A/B slot (e.g. a v0.6.x device OTA-ing onto this
+#     image, which has no marker yet). Rebooting then would spend GRUB's
+#     boot-once budget and get the update reverted. The trigger does not
+#     need an immediate reboot: the firmware consumes it at the START of
+#     whatever boot comes next — by which time the app has validated the
+#     slot (Nerves.Runtime.StartupGuard), so the apply-reboot is free.
 #
 # efivarfs mechanics: file = 4 attribute bytes + value; attributes
 # 0x00000007 = NV|BS|RT must be included in the write; chattr -i first
@@ -40,7 +47,6 @@ grep -q efivarfs /proc/mounts || mount -t efivarfs efivarfs $VAR_DIR 2>/dev/null
 chattr -i $VAR 2>/dev/null || true
 printf '\007\000\000\000\001\000\000\000' > $VAR
 
-echo "qcom-uefi-vars: HypervisorOverride trigger set ($MARK), rebooting to apply" > /dev/kmsg
-reboot
+echo "qcom-uefi-vars: HypervisorOverride trigger set ($MARK); applies from next boot" > /dev/kmsg
 
 exit 0

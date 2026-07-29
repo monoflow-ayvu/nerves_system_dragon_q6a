@@ -528,7 +528,15 @@ sometimes reboot itself once more to apply. It therefore reads 0 while the overr
 never key logic on its value. `rootfs_overlay/usr/sbin/qcom-uefi-vars.sh` (from
 `qcom-coldplug.sh`) handles this: it writes the trigger once per (device × boot-firmware) lifetime,
 tracked by a marker file `/root/.hypervisor-override-requested@<bios_version>` (the version tag
-re-arms the trigger automatically if a boot-firmware update resets hypervisor config), then reboots.
+re-arms the trigger automatically if a boot-firmware update resets hypervisor config).
+
+**It must NOT reboot after writing the trigger.** The script can run in the first boot of an
+*unvalidated* A/B slot (e.g. a v0.6.x device OTA-ing onto an image that introduced the script — no
+marker yet). Rebooting there spends GRUB's boot-once budget and the update is reverted. The trigger
+needs no immediate reboot: the firmware consumes it at the start of whatever boot comes next — by
+then the app has validated the slot (`Nerves.Runtime.StartupGuard`), so the firmware's own
+apply-reboot costs nothing. (v0.7.0 shipped the rebooting version; OTA from v0.6.x to v0.7.0 is
+reverted by it — fixed in v0.7.1.)
 
 The variable:
 
@@ -559,7 +567,8 @@ Rules that are easy to get wrong:
   ignored by the firmware.
 * **Single write() of attrs+value.** A shell `>` redirection is one write; two appends corrupt it.
 * **`chattr -i` first** or the write fails with EPERM ("not owner").
-* **EDK2 reads setup variables only at boot** — changes apply on the *next* boot.
+* **EDK2 reads setup variables only at boot** — changes apply on the *next* boot, and no sooner is
+  ever required (see the A/B-validation note above).
 
 Measured with the override active (2026-07-28, venus p1 firmware): H.264 encode 1080p ~87 fps,
 640×480 ~280 fps, 320×240 ~580 fps; 720p H.264 and HEVC (any size) still stall with zero frames —
