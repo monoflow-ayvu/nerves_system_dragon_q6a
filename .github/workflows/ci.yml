@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   get-br-dependencies:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       # lfs: true is load-bearing: the QNN runtime blobs under blobs/ are LFS
       # objects. A pointer checkout ships 131-byte pointer text files as
@@ -51,7 +51,7 @@ jobs:
 
   build-system:
     needs: [get-br-dependencies]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     env:
       # Never resolve this repo's own published artifact — always build
       # (see artifact_sites() in mix.exs).
@@ -191,7 +191,7 @@ jobs:
     # Gate the release on a green build AND a successful QEMU boot.
     needs: [build-system, qemu-smoke]
     if: github.ref_type == 'tag'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
