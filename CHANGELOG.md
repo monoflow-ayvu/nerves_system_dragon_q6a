@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.8.0
+
+HTTPS/TLS for ffmpeg, plus the HypervisorOverride OTA-killer fix that
+slipped past v0.7.0. Layout unchanged since v0.6.0 — OTA from any
+v0.6.x/v0.7.x is safe.
+
+- **ffmpeg HTTPS/TLS**: `BR2_PACKAGE_GNUTLS=y` — buildroot's ffmpeg.mk
+auto-enables `--enable-gnutls`, giving the ffmpeg CLI the `https`,
+`tls`, `rtmps`, `wss` protocols (`ffmpeg -i https://…`). GnuTLS
+(LGPL-2.1+/GPL-3 dual) is the license-clean TLS backend here: OpenSSL
+is already in the image (Erlang `:ssl` via nerves-config) but is
+GPL-incompatible with `BR2_PACKAGE_FFMPEG_GPL=y`, so ffmpeg.mk forces
+`--disable-openssl`.
+- **HypervisorOverride no longer reboots at boot (OTA-killer fix).**
+v0.7.0's `qcom-uefi-vars.sh` rebooted right after writing the trigger —
+which on the first boot of an unvalidated A/B slot (exactly a
+v0.6.x → v0.7.0 OTA) spent GRUB's boot-once budget and rolled the
+update back. The trigger needs no immediate reboot: the firmware
+consumes it at the start of the next boot, after the app has validated
+the slot (`Nerves.Runtime.StartupGuard`), so the firmware's own
+apply-reboot is free.
+- Docs: full UEFI variable inventory + Venus behavior matrix in
+  `docs/BOARD_QUIRKS.md`.
+
 ## v0.7.0
 
 Venus video (VPU) enablement plus software encoders. Layout unchanged

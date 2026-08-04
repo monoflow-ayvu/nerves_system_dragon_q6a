@@ -536,7 +536,7 @@ marker yet). Rebooting there spends GRUB's boot-once budget and the update is re
 needs no immediate reboot: the firmware consumes it at the start of whatever boot comes next — by
 then the app has validated the slot (`Nerves.Runtime.StartupGuard`), so the firmware's own
 apply-reboot costs nothing. (v0.7.0 shipped the rebooting version; OTA from v0.6.x to v0.7.0 is
-reverted by it — fixed in v0.7.1.)
+reverted by it — fixed in v0.8.0.)
 
 The variable:
 
