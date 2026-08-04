@@ -203,7 +203,12 @@ BR2_PACKAGE_GST1_PLUGINS_BAD_PLUGIN_VIDEOPARSERS=y
 BR2_PACKAGE_GST1_LIBAV=y
 # ffmpeg CLI for offline conversion (codecs/demuxers default "all";
 # HW decode/encode via h264_v4l2m2m & friends).
+# GnuTLS: ffmpeg.mk auto-enables --enable-gnutls when the package is set,
+# giving https/tls/rtmps/wss. OpenSSL is already built (nerves-config
+# selects it for Erlang) but is GPL-incompatible, so ffmpeg.mk forces
+# --disable-openssl with FFMPEG_GPL=y — GnuTLS is the license-clean path.
 BR2_PACKAGE_FFMPEG=y
+BR2_PACKAGE_GNUTLS=y
 BR2_PACKAGE_FFMPEG_GPL=y
 BR2_PACKAGE_FFMPEG_SWSCALE=y
 BR2_PACKAGE_FFMPEG_FFPROBE=y
