@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.9.0
+
+Vulkan userspace for the Adreno 643: Mesa Turnip + the Khronos ICD loader +
+vulkaninfo. Kernel and firmware side shipped with v0.5.0 — the dmesg
+`ops a3xx_ops` line that looked like a blocker is the kernel's generic
+component-ops name used by every Adreno generation, not the GPU backend:
+the pinned radxa/kernel binds this part through the modern a6xx path
+(chip_id 0x06030500 → `a6xx_gpu_init`). Layout unchanged since v0.6.0 —
+OTA from any v0.6.x/v0.7.x/v0.8.x is safe.
+
+- **Vulkan: Mesa Turnip** (`BR2_PACKAGE_MESA3D_VULKAN_DRIVER_FREEDRENO`)
+  — builds `libvulkan_freedreno.so` + the freedreno ICD json
+  (`/usr/share/vulkan/icd.d/freedreno_icd.*.json`). The option is not in
+  Buildroot 2026.05 (upstream added it after that release), so the symbol
+  and the meson wiring live in this repo's external tree (`Config.in` +
+  `external.mk`); drop both once nerves_system_br bumps past a Buildroot
+  that ships it.
+- **Vulkan loader + tools**: `vulkan-loader` + `vulkan-tools`
+  (`vulkaninfo`). Render-node access was already in place (eudev gives
+  `renderD*` 0666, Nerves runs as root). Acceptance check on the board:
+  `vulkaninfo | grep deviceName` should list an Adreno 7c+/FD643 device.
+- Docs: full kernel-compat evidence (a3xx_ops misdiagnosis, Turnip ioctl
+  surface, FD643 chip match) in `WORKING_NOTES.md`.
+
 ## v0.8.0
 
 HTTPS/TLS for ffmpeg, plus the HypervisorOverride OTA-killer fix that
