@@ -1104,6 +1104,50 @@ same ABI, so linking is fine.
 - Perf-mode/profiling intentionally not wired: in rc.8 `PerformanceMode` is not re-exported at the
   `ort` root, so naming it fails to compile. Revisit if the ort dep is bumped (upstream is rc.12).
 
+## Vulkan userspace: Turnip + loader + vulkaninfo (2026-08-07)
+
+Feasibility question answered with kernel-source evidence: **the "a3xx_ops"
+showstopper does not exist** on the pinned kernel (radxa/kernel @ 559f4f92).
+`a3xx_ops` in `adreno_device.c` is the *component* ops struct shared by every
+Adreno generation (vestigial name); the actual GPU backend is selected inside
+`adreno_bind()` by `find_chipid()` → `adreno_info()` → `info->init`, and for
+our DT compatible (`qcom,adreno-635.0` → chip_id 0x06030500) that is
+`a6xx_gpu_init` (a6xx_catalog.c, A635/A643, GEN4/a660-family). The dmesg line
+`bound 3d00000.gpu (ops a3xx_ops [msm])` is what *every* Adreno prints. The
+DRM ioctl surface (MSM_GEM_*, MSM_SUBMITQUEUE_*, MSM_VM_BIND) is
+generation-independent — one `msm_ioctls` table — and the board already runs
+it (freedreno GL works, GMU firmware v3.1.10 loads, renderD128 exists).
+Turnip's full ioctl/param requirements (incl. VM_BIND via per-process
+pgtables from arm-smmu-qcom, UBWC config via qcom,qcm6490, speedbin nvmem,
+and the FD643/wildcard chip-id match in mesa's freedreno_devices.py) all
+check out against this kernel.
+
+What was missing was userspace, so it was added to the external tree
+(Buildroot 2026.05's mesa3d has no freedreno Vulkan option — upstream added
+it after that release):
+
+- `Config.in`: `BR2_PACKAGE_MESA3D_VULKAN_DRIVER_FREEDRENO` (selects
+  `BR2_PACKAGE_MESA3D_VULKAN_DRIVER` for the glslang dep + ICD plumbing).
+- `external.mk`: late-bound `MESA3D_CONF_OPTS` swap of the builtin empty
+  `-Dvulkan-drivers=` for `-Dvulkan-drivers=freedreno -Dfreedreno-kmds=msm`.
+- `nerves_defconfig`: turnip + `BR2_PACKAGE_VULKAN_LOADER` +
+  `BR2_PACKAGE_VULKAN_TOOLS` (vulkaninfo). Render-node access was already
+  fine: eudev's 50-udev-default.rules gives renderD* 0666, and Nerves runs
+  as root anyway.
+
+Verified by scratch kconfig run (`make … defconfig` into /tmp/br-vk-test):
+all three symbols land in .config, mesa3d still 26.1.2 with gallium freedreno
+(EGL/GLES untouched), and `printvars MESA3D_CONF_OPTS` shows
+`-Dvulkan-drivers=freedreno -Dfreedreno-kmds=msm` with host-python-glslang
+in deps. Not yet built/flashed; needs a full system build + on-board
+`vulkaninfo | grep deviceName` (expect "Adreno 7c+ Gen 3" or "FD643").
+
+wgpu/smelter (item 5) is app-side, not system-side: prebuilt wgpu-native
+aarch64-linux exists (v29.0.1.1, `wgpu-linux-aarch64-release.zip`), but
+software-mansion/smelter links the Rust `wgpu` crate directly, so it needs a
+Rust cross-compile to aarch64-nerves-linux-gnu (linker from the Nerves
+toolchain) rather than a wgpu-native C ABI drop-in.
+
 ## Decisions and gotchas worth not re-deriving
 
 - **A `SITE_METHOD = local` package does NOT rebuild when you edit its source tree.** Buildroot keys
