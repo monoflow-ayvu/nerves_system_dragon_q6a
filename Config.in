@@ -23,3 +23,27 @@ comment "AIC8800D80 USB WiFi 6 / Bluetooth (vendor driver + firmware)"
 source "$NERVES_DEFCONFIG_DIR/package/aic8800/Config.in"
 
 endmenu
+
+menu "Dragon Q6A GPU / Vulkan"
+
+# Turnip (Mesa's freedreno Vulkan) is not in Buildroot 2026.05's mesa3d
+# package — upstream added BR2_PACKAGE_MESA3D_VULKAN_DRIVER_FREEDRENO after
+# that release. The symbol lives here, and the meson plumbing that would
+# otherwise live in package/mesa3d/mesa3d.mk is applied late in
+# external.mk (included after the builtin package definitions). See
+# external.mk for the wiring. Drop both once nerves_system_br bumps past a
+# Buildroot that ships the upstream symbol.
+config BR2_PACKAGE_MESA3D_VULKAN_DRIVER_FREEDRENO
+	bool "Mesa Turnip Vulkan driver (freedreno)"
+	depends on BR2_arm || BR2_aarch64 || BR2_aarch64_be # libdrm-freedreno
+	depends on BR2_PACKAGE_MESA3D
+	select BR2_PACKAGE_MESA3D_VULKAN_DRIVER
+	help
+	  Mesa's Turnip Vulkan driver for Adreno GPUs, driven through the
+	  msm kernel-mode driver (the modern a6xx path this system's kernel
+	  already runs). Requires the Adreno SQE/GMU firmware already
+	  vendored by qcom-dsp-firmware. Installs
+	  /usr/share/vulkan/icd.d/freedreno_icd.*.json so the
+	  vulkan-loader can find libvulkan_freedreno.so.
+
+endmenu

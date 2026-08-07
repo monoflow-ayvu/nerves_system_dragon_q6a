@@ -160,6 +160,17 @@ BR2_PACKAGE_MESA3D_OPENGL_ES=y
 BR2_PACKAGE_MESA3D_GBM=y
 BR2_PACKAGE_KMSCUBE=y
 
+# --- Vulkan userspace: Turnip (freedreno) + loader + vulkaninfo ---
+# Kernel side is already the modern a6xx msm path (a660 SQE/GMU/zap
+# firmware from qcom-dsp-firmware, CONFIG_DRM_MSM=m). The turnip option is
+# an external-tree addition (Buildroot 2026.05 predates upstream's freedreno
+# Vulkan driver) — see Config.in + external.mk. vulkan-tools provides
+# vulkaninfo; the loader finds the ICD at
+# /usr/share/vulkan/icd.d/freedreno_icd.*.json.
+BR2_PACKAGE_MESA3D_VULKAN_DRIVER_FREEDRENO=y
+BR2_PACKAGE_VULKAN_LOADER=y
+BR2_PACKAGE_VULKAN_TOOLS=y
+
 # --- Audio: ALSA userspace (AudioReach/WCD9380 kernel side is =m) ---
 # No alsa-ucm-conf package in Buildroot: mixer routing for the WCD938x
 # needs manual amixer/alsaucm setup (or vendor UCM profiles later).
