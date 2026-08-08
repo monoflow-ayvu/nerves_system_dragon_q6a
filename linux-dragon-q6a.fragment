@@ -204,6 +204,15 @@ CONFIG_R8169=y
 CONFIG_IP_ADVANCED_ROUTER=y
 CONFIG_IP_MULTIPLE_TABLES=y
 
+# --- WireGuard VPN (client tunnels) ---
+# Builtin (=y), not a module: the VPN is a boot-critical network path and
+# this removes any module-load ordering dependency (a bare `ip link add wg0
+# type wireguard` before the module is autoloaded fails with "Operation not
+# supported"). WireGuard in 6.18 selects its own crypto (chacha20poly1305 /
+# curve25519), so nothing else needs pinning here. Userspace: wg/wg-quick
+# via BR2_PACKAGE_WIREGUARD_TOOLS.
+CONFIG_WIREGUARD=y
+
 # --- NVMe on the M.2 M-key slot ---
 CONFIG_BLK_DEV_NVME=y
 
