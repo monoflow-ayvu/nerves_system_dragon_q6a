@@ -13,13 +13,17 @@ config BR2_PACKAGE_ONNXRUNTIME_QNN
 	  ONNX Runtime dlopen()s it when a session appends the "QNN" execution
 	  provider, so no custom ONNX Runtime build is required.
 
-	  The QNN backend itself — libQnnHtp.so, libQnnHtpPrepare.so,
-	  libQnnHtpV68Skel.so, libQnnHtpV68Stub.so, libQnnSystem.so — is
-	  vendored alongside the provider in blobs/onnxruntime-qnn and
-	  installed to /usr/lib/onnxruntime-qnn/. Point the EP's
-	  `backend_path` option at /usr/lib/onnxruntime-qnn/libQnnHtp.so.
-	  (qairt-runtime's same-named /usr/lib copies are QAIRT 2.42 and
-	  cannot serve this EP — "Unable to find a valid interface".)
+	  The QNN backend set — libQnnHtp.so, libQnnHtpPrepare.so,
+	  libQnnHtpV68Skel.so, libQnnHtpV68Stub.so, libQnnSystem.so and
+	  libQnnGpu.so — is vendored alongside the provider in
+	  blobs/onnxruntime-qnn and installed to /usr/lib/onnxruntime-qnn/.
+	  Point the EP's `backend_path` option at
+	  /usr/lib/onnxruntime-qnn/libQnnHtp.so. libQnnGpu.so (the Adreno
+	  GPU backend) is included for completeness: this image ships no
+	  libOpenCL.so, so the GPU backend finds no OpenCL platform until an
+	  OpenCL userspace exists. (qairt-runtime's same-named /usr/lib
+	  copies are QAIRT 2.42 and cannot serve this EP — "Unable to find
+	  a valid interface".)
 
 	  Blobs are vendored from the upstream manylinux aarch64 wheels into
 	  blobs/onnxruntime-qnn/ - see its README. Proprietary QNN pieces are

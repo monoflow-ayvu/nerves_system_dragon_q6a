@@ -80,11 +80,14 @@ Five files, 105 MB, from the same `onnxruntime_qnn` 2.4.0 aarch64 wheel as
 | `libQnnSystem.so` | 5.3 MB | |
 | `libQnnHtp.so` | 4.3 MB | the backend the EP loads (`backend_path`) |
 | `libQnnHtpV68Stub.so` | 0.5 MB | ARM-side stub for the skel |
+| `libQnnGpu.so` | 8.9 MB | the QNN **GPU** backend (Adreno via OpenCL). Present for completeness/future bring-up — this image ships **no `libOpenCL.so`** (no rusticl for freedreno, no vendor driver), so the EP's `backend_type: "gpu"` can load the lib but finds no OpenCL platform (`Backend GPU: Not Found` in the QNN logs is expected and harmless) |
 
 Checksums (sha256, first 16 hex): `53cc30587bb0f0de` libQnnHtp, `fce94a061b8152b1`
 libQnnHtpPrepare, `722426cbc5c74a2f` libQnnHtpV68Skel, `0df22195ab471374`
-libQnnHtpV68Stub, `ed5442fec388a4ad` libQnnSystem. Verified byte-identical to the
-set that was proven working on the board.
+libQnnHtpV68Stub, `ed5442fec388a4ad` libQnnSystem, `6be6b7eee38d7211`
+libQnnGpu. Verified byte-identical to the files in the upstream
+`onnxruntime_qnn` 2.4.0 aarch64 wheel (the HTP set was additionally proven
+working on the board).
 
 ### Why a subdirectory and not `/usr/lib`
 
@@ -97,7 +100,7 @@ filenames, so this set lives in its own directory and neither overwrites the oth
 
 ### Flat, not `dsp/`
 
-All five sit in one directory on purpose. `Example.Yolo.qnn_opts/1` points both
+All six sit in one directory on purpose. `Example.Yolo.qnn_opts/1` points both
 `backend_path` and `DSP_LIBRARY_PATH` at this directory, which is the layout proven
 to work; it only looks for a `dsp/` subdirectory if one exists.
 
