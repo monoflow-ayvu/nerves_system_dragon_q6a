@@ -223,6 +223,12 @@ BR2_PACKAGE_GNUTLS=y
 BR2_PACKAGE_FFMPEG_GPL=y
 BR2_PACKAGE_FFMPEG_SWSCALE=y
 BR2_PACKAGE_FFMPEG_FFPROBE=y
+# Vulkan filters (--enable-vulkan): hwupload + *_vulkan filters (vflip,
+# hflip, scale, ...) and the GLSL shader filter — GPU rotate/transpose for
+# the AI branch. Needs vulkan-headers at build time; runtime uses the
+# turnip ICD from the Vulkan block above.
+BR2_PACKAGE_FFMPEG_VULKAN=y
+BR2_PACKAGE_VULKAN_HEADERS=y
 # Software encode (VPU encode only works <= 480p today): H.264 + HEVC.
 # ffmpeg.mk auto-enables --enable-libx264/--enable-libx265 when these are
 # set and FFMPEG_GPL=y.
