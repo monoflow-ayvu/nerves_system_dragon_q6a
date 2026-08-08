@@ -31,28 +31,24 @@ this SoC (`meta-q6a-nerveshub/recipes-ml/python3-onnxruntime-qnn`). We take the
 
 `manylinux_2_34` needs glibc >= 2.34; this system is on **2.43**.
 
-## The QNN backend comes from qairt-runtime, deliberately
+## The QNN backend: vendored in `usr/lib/onnxruntime-qnn/`, not qairt-runtime
 
-`onnxruntime_qnn-2.4.0` also bundles its own QNN backend
-(`libQnnHtp.so`, `libQnnSystem.so`, `libQnnHtpV68Stub.so`,
-`libQnnHtpV68Skel.so`, plus V69–V81 sets and an 89 MB
-`libQnnHtpPrepare.so`). We do **not** vendor those: `blobs/qairt-runtime`
-already ships a QAIRT 2.42.0.251225 set that is validated on this board
-(`fastrpc_test -a v68` 3/3, `qnn-platform-validator` unit test Passed), and
-installing a second set would collide on `/usr/lib/libQnnHtp.so` and on the
-`libQnnHtpV68Skel.so` name inside `DSP_LIBRARY_PATH`.
-
-Point the EP at the existing backend:
+`onnxruntime_qnn-2.4.0` bundles its own QNN backend (`libQnnHtp.so`,
+`libQnnSystem.so`, `libQnnHtpV68Stub.so`, `libQnnHtpV68Skel.so`, plus an
+89 MB `libQnnHtpPrepare.so`). That set is vendored under
+`usr/lib/onnxruntime-qnn/` (see below) because `blobs/qairt-runtime`
+ships a **different version** (QAIRT 2.42.0.251225) of the same filenames
+under `/usr/lib` and `/usr/lib/dsp` — the two stacks cannot share a
+prefix. The QAIRT 2.42 set serves `qnn-platform-validator`; the vendored
+2.4.0 set serves the ORT EP. The EP must be pointed at the subdir:
 
 ```elixir
-Ortex.load(path, [{:qnn, backend_path: "/usr/lib/libQnnHtp.so"}])
+Ortex.load(path, [{:qnn, backend_path: "/usr/lib/onnxruntime-qnn/libQnnHtp.so"}])
 ```
 
-**Version-skew risk, accepted knowingly:** ORT 1.28's QNN EP was built against
-the QNN version bundled in its own wheel, not against QAIRT 2.42. If the EP
-rejects the backend at session creation, the fallback is to vendor the wheel's
-QNN set under a separate prefix (e.g. `/usr/lib/onnxruntime/`) and set
-`backend_path` plus a per-process `DSP_LIBRARY_PATH` accordingly. Adds ~45 MB.
+**Version-skew note:** ORT 1.28's QNN EP is built against the QNN version
+bundled in its own wheel, which is why the wheel's set is used instead of
+QAIRT 2.42 (`Unable to find a valid interface for /usr/lib/libQnnHtp.so`).
 
 ## On-device graph compilation is NOT available
 
