@@ -3,6 +3,10 @@ deps/
 .nix-mix/
 .nix-hex/
 *.fw
+# …but NOT the Adreno SQE microcode vendored in the firmware blobs — a bare
+# `*.fw` silently excluded it from CI checkouts and v0.9.0 shipped without
+# qcom/a660_sqe.fw (MSM: "Direct firmware load … failed", no GPU for Turnip).
+!blobs/qcom-dsp-firmware/**/*.fw
 *.img
 # `mix nerves.artifact` drops the packaged system tarball in the repo root.
 nerves_system_dragon_q6a-portable-*.tar.gz
