@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.9.1
+
+**The v0.9.0 prebuilt shipped without `qcom/a660_sqe.fw`** — the bare
+`*.fw` gitignore silently excluded the vendored Adreno SQE microcode from
+CI checkouts (the file existed only untracked on the build machine, so the
+artifact checksum matched while the rootfs missed it). MSM logged
+"Direct firmware load for qcom/a660_sqe.fw failed" and Turnip had no GPU
+(`VK_ERROR_INITIALIZATION_FAILED`). If you flashed v0.9.0, upgrade.
+
+- **Adreno SQE firmware now tracked + guarded**: `a660_sqe.fw` force-added
+  (`b6b360d`) and a `.gitignore` negation keeps it out of the `*.fw` rule
+  from now on. Verified on hardware: `vulkaninfo` enumerates Turnip
+  Adreno 643 (API 1.3.348) and a compute-shader rotation runs (PASS).
+- **ffmpeg Vulkan filters**: `BR2_PACKAGE_FFMPEG_VULKAN`
+  (`--enable-vulkan`: `hwupload` + `*_vulkan` filters, GLSL shader
+  support) and `BR2_PACKAGE_VULKAN_HEADERS`, so ffmpeg can exercise the
+  Adreno for the AI-branch rotate/transpose demo.
+
 ## v0.9.0
 
 Vulkan userspace for the Adreno 643: Mesa Turnip + the Khronos ICD loader +
