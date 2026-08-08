@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.9.3
+
+WireGuard VPN support — kernel and userspace. Layout unchanged since
+v0.6.0 — OTA from any v0.6.x+ is safe.
+
+- **Kernel: `CONFIG_WIREGUARD=y`** (builtin) in `linux-dragon-q6a.fragment`.
+  Builtin rather than a module so `ip link add wg0 type wireguard` always
+  works regardless of module-autoload ordering; Kconfig deps verified
+  against the pinned kernel (NET+INET =y, everything else selected, so the
+  symbol cannot be silently demoted).
+- **Userspace: `BR2_PACKAGE_WIREGUARD_TOOLS=y`** — `wg` + `wg-quick`
+  (1.0.20260223) for configuring client tunnels.
+
 ## v0.9.2
 
 QNN GPU backend vendored into the image, for completeness and future
