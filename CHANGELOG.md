@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.9.2
+
+QNN GPU backend vendored into the image, for completeness and future
+OpenCL bring-up. Layout unchanged since v0.6.0 — OTA from any v0.6.x+
+is safe.
+
+- **`libQnnGpu.so` added to `/usr/lib/onnxruntime-qnn/`** — the QNN GPU
+  backend (Adreno via OpenCL), 8.9 MB from the `onnxruntime_qnn` 2.4.0
+  aarch64 wheel, now installed alongside the HTP set. Note: it loads but
+  cannot create a device until an OpenCL userspace exists — the image has
+  no `libOpenCL.so` (no rusticl for freedreno, no vendor driver), so
+  `Backend GPU: Not Found` in QNN logs remains expected.
+- Docs: blobs README + `onnxruntime-qnn` Config.in updated to describe the
+  full six-file set and the OpenCL caveat.
+
 ## v0.9.1
 
 **The v0.9.0 prebuilt shipped without `qcom/a660_sqe.fw`** — the bare
