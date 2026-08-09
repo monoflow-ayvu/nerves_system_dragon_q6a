@@ -208,9 +208,17 @@ CONFIG_IP_MULTIPLE_TABLES=y
 # Builtin (=y), not a module: the VPN is a boot-critical network path and
 # this removes any module-load ordering dependency (a bare `ip link add wg0
 # type wireguard` before the module is autoloaded fails with "Operation not
-# supported"). WireGuard in 6.18 selects its own crypto (chacha20poly1305 /
-# curve25519), so nothing else needs pinning here. Userspace: wg/wg-quick
-# via BR2_PACKAGE_WIREGUARD_TOOLS.
+# supported"; WireGuard has no modalias, so udev would never autoload it).
+#
+# CONFIG_IPV6=y is REQUIRED for WIREGUARD=y to stick. The driver's
+# `depends on IPV6 || !IPV6` is NOT a tautology in Kconfig tristate logic:
+# !m == m, so with the base defconfig's CONFIG_IPV6=m the dependency
+# evaluates to m and olddefconfig silently demotes WIREGUARD=y to =m —
+# measured 2026-08-09 against the pinned kernel (v0.9.3 shipped with an
+# empty kernel side for exactly this reason; the Image had no wireguard
+# strings). WireGuard also selects its own crypto (chacha20poly1305 /
+# curve25519), so nothing else needs pinning.
+CONFIG_IPV6=y
 CONFIG_WIREGUARD=y
 
 # --- NVMe on the M.2 M-key slot ---
