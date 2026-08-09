@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.9.4
+
+**v0.9.3's kernel side was empty — do not use it for WireGuard.** The
+`depends on IPV6 || !IPV6` on the driver is not a tautology in Kconfig
+tristate logic (`!m == m`), so with the base defconfig's `CONFIG_IPV6=m`,
+`olddefconfig` silently demoted `CONFIG_WIREGUARD=y` to `=m`, which built
+nothing (no module, no modalias to autoload). v0.9.3 shipped `wg` userspace
+but no kernel support; 0.9.4 fixes the kernel side. Layout unchanged since
+v0.6.0 — OTA from any v0.6.x+ is safe.
+
+- **Kernel: `CONFIG_IPV6=y` + `CONFIG_WIREGUARD=y`** — verified against the
+  pinned kernel that the merged config keeps both through `olddefconfig`.
+  WireGuard is builtin so `ip link add wg0 type wireguard` works with no
+  module-load ordering dependency.
+- **Userspace: `wg` (no `wg-quick`)** — the image has no bash (busybox
+  only), and wireguard-tools' Makefile auto-disables wg-quick without
+  bash. Plain `wg` is the full client-configuration path.
+
 ## v0.9.3
 
 WireGuard VPN support — kernel and userspace. Layout unchanged since
