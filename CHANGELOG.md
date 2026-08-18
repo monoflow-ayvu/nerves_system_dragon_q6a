@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.5
+
+- **ffmpeg text overlays (drawtext)** — `BR2_PACKAGE_FREETYPE=y`
+  (ffmpeg.mk auto-enables `--enable-libfreetype` on glibc), plus
+  `libfribidi` (bidi/RTL) and `harfbuzz` (complex-script shaping) for the
+  `drawtext` filter. Ships **DejaVu Sans** (`BR2_PACKAGE_DEJAVU_SANS`) as
+  the image's only font — there is no fontconfig, so use
+  `drawtext=fontfile=/usr/share/fonts/dejavu/DejaVuSans.ttf:...`.
+
 ## v0.9.4
 
 **v0.9.3's kernel side was empty — do not use it for WireGuard.** The

@@ -223,6 +223,24 @@ BR2_PACKAGE_GST1_LIBAV=y
 # --disable-openssl with FFMPEG_GPL=y — GnuTLS is the license-clean path.
 BR2_PACKAGE_FFMPEG=y
 BR2_PACKAGE_GNUTLS=y
+# libfreetype: ffmpeg.mk auto-enables --enable-libfreetype when freetype is
+# set (needs glibc toolchain, which this system uses) — powers the drawtext
+# filter for burning text onto video.
+BR2_PACKAGE_FREETYPE=y
+# Text shaping for drawtext: libfribidi (bidi/RTL), harfbuzz (complex
+# scripts — Arabic, Indic). Both auto-enable --enable-libfribidi /
+# --enable-libharfbuzz in ffmpeg.mk.
+BR2_PACKAGE_LIBFRIBIDI=y
+BR2_PACKAGE_HARFBUZZ=y
+# DejaVu Sans: the only font on the image — drawtext needs a real font file,
+# there is no fontconfig (fontfile=/usr/share/fonts/dejavu/DejaVuSans.ttf).
+# Sub-families default to y, so pin only Sans to keep the image lean.
+BR2_PACKAGE_DEJAVU=y
+BR2_PACKAGE_DEJAVU_SANS=y
+# BR2_PACKAGE_DEJAVU_MONO is not set
+# BR2_PACKAGE_DEJAVU_SERIF is not set
+# BR2_PACKAGE_DEJAVU_SANS_CONDENSED is not set
+# BR2_PACKAGE_DEJAVU_SERIF_CONDENSED is not set
 BR2_PACKAGE_FFMPEG_GPL=y
 BR2_PACKAGE_FFMPEG_SWSCALE=y
 BR2_PACKAGE_FFMPEG_FFPROBE=y
