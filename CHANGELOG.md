@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.10.0
+
+- **VPU: iris driver + Gen2 firmware (experimental fix for the venus
+  encoder wedge)** — the legacy venus driver wedges at session teardown
+  (`wait for cpu and video core idle fail (-110)`) and only a reboot
+  recovers it. This release backports the upstream 7.3-era iris driver
+  (SC7280/kodiak platform support, Gen2 firmware autodetect with Gen1
+  fallback, GDSC HW-mode-after-boot fix) onto the pinned Radxa 6.18.2
+  kernel, and ships the Gen2 VPU firmware
+  `qcom/vpu/vpu20_p1_gen2_s6.mbn` (linux-firmware, redistributable).
+  iris claims the `qcom,sc7280-venus` compatible (venus yields it via a
+  guard patch and stays available for rollback by dropping
+  `CONFIG_VIDEO_QCOM_IRIS` from the fragment). The venus DT node gains
+  `dma-coherent` per the Aug 2026 iris series. Patch set under
+  `patches/linux/0001..0004`; the Gen2 blob sits beside the Gen1 one —
+  iris prefers Gen2 and falls back to `vpu20_p1.mbn` automatically.
+  **Gate before relying on it: re-run BOARD_QUIRKS §11 matrix plus the
+  48 h teardown-wedge reproducer.** If iris regresses, remove the
+  fragment line and venus + Gen1 behave exactly as v0.9.5.
+
 ## v0.9.5
 
 - **ffmpeg text overlays (drawtext)** — `BR2_PACKAGE_FREETYPE=y`
