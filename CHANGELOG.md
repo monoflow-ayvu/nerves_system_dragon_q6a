@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.10.1
+
+- **VPU/iris: fix PAS firmware rejection (-22) on QCS6490** — v0.10.0
+  failed on hardware: TZ rejected `PAS_INIT_IMAGE` for the video firmware
+  (both blobs) because iris ran its register-level VPU power-on *before*
+  the PIL calls. Patch 0005 reorders `iris_core_init` to the
+  venus/remoteproc-proven sequence: load + authenticate firmware first,
+  then power on the core. venus stays guarded off sc7280; Gen2 blob
+  remains the loaded firmware (no Gen1 fallback change).
+
 ## v0.10.0
 
 - **VPU: iris driver + Gen2 firmware (experimental fix for the venus

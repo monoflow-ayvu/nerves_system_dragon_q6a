@@ -1,0 +1,66 @@
+media: iris: load and authenticate firmware before VPU power-on
+
+On QCS6490 (radxa/kernel 6.18.2 + this backport), the TZ PIL
+init_image call is rejected with -EINVAL when issued after
+iris_vpu_power_on()'s register-level bring-up, so both Gen1 and Gen2
+blobs fail with "firmware download failed -22". venus on the same
+kernel/TZ loads firmware before touching the core; reorder iris the
+same way (remoteproc-style): hfi_queues_init -> fw_load -> vpu_power_on
+-> boot_firmware. Unwind keeps the original unload-before-power-off
+order.
+diff --git a/drivers/media/platform/qcom/iris/iris_core.c b/drivers/media/platform/qcom/iris/iris_core.c
+index 8c335db..85e4e0d 100644
+--- a/drivers/media/platform/qcom/iris/iris_core.c
++++ b/drivers/media/platform/qcom/iris/iris_core.c
+@@ -68,35 +68,42 @@ int iris_core_init(struct iris_core *core)
+ 	if (ret)
+ 		goto error;
+ 
+-	ret = iris_vpu_power_on(core);
++	/*
++	 * Load and authenticate the firmware before touching the video
++	 * core (remoteproc-style order, as venus does). On QCS6490 the TZ
++	 * PIL init_image call is rejected (-EINVAL) when issued after
++	 * iris_vpu_power_on()'s register-level bring-up.
++	 */
++	ret = iris_fw_load(core);
+ 	if (ret)
+ 		goto error_queue_deinit;
+ 
+-	ret = iris_fw_load(core);
+-	if (ret)
+-		goto error_power_off;
++	ret = iris_vpu_power_on(core);
++	if (ret) {
++		iris_fw_unload(core);
++		goto error_queue_deinit;
++	}
+ 
+ 	ret = iris_vpu_boot_firmware(core);
+ 	if (ret)
+-		goto error_unload_fw;
++		goto error_unload_fw_power_off;
+ 
+ 	ret = iris_vpu_switch_to_hwmode(core);
+ 	if (ret)
+-		goto error_unload_fw;
++		goto error_unload_fw_power_off;
+ 
+ 	core->iris_firmware_data->init_hfi_ops(core);
+ 
+ 	ret = iris_hfi_core_init(core);
+ 	if (ret)
+-		goto error_unload_fw;
++		goto error_unload_fw_power_off;
+ 
+ 	mutex_unlock(&core->lock);
+ 
+ 	return iris_wait_for_system_response(core);
+ 
+-error_unload_fw:
++error_unload_fw_power_off:
+ 	iris_fw_unload(core);
+-error_power_off:
+ 	iris_vpu_power_off(core);
+ error_queue_deinit:
+ 	iris_hfi_queues_deinit(core);
