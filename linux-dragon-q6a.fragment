@@ -369,11 +369,11 @@ CONFIG_DRM_MSM_DP=y
 # --- probed via udev coldplug. Firmware from qcom-dsp-firmware.
 CONFIG_SC_LPASS_CORECC_7280=m
 CONFIG_VIDEO_QCOM_VENUS=m
-# v0.10.2 BISECT: iris disabled, venus back on sc7280. Isolates whether the
-# PAS init_image -22 is iris-specific or image-wide (both blobs + dma-coherent
-# DT stay). venus works here -> fault is in the iris backport; venus also
-# fails -> fault is elsewhere in the v0.10.x patchset.
-# CONFIG_VIDEO_QCOM_IRIS is not set
+# iris (7.3 backport, patches/linux/0001) claims the sc7280-venus compatible
+# instead of legacy venus and loads the Gen2 VPU firmware
+# (qcom/vpu/vpu20_p1_gen2_s6.mbn). Patch 0005 runs the TZ PIL calls in
+# venus's proven power state (fixes the v0.10.0/v0.10.1 PAS -22).
+CONFIG_VIDEO_QCOM_IRIS=m
 CONFIG_QCOM_APR=m
 CONFIG_SOUNDWIRE=m
 CONFIG_SOUNDWIRE_QCOM=m

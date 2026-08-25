@@ -1,0 +1,124 @@
+media: iris: run TZ PIL calls in venus's exact power state
+
+On QCS6490 (radxa/kernel 6.18.2 + this backport), PAS init_image is
+rejected with -EINVAL for the video firmware in both iris power states
+tried: after iris_vpu_power_on()'s full register-level bring-up
+(v0.10.0) and with the core fully off (v0.10.1). venus on the same
+board/image authenticates the same blob every boot with: "venus" GDSC
+on, MVSC clocks (core/iface/bus) enabled, ICC voted, vcodec0/MVS0 off,
+and zero video-core MMIO writes.
+
+Split iris_core_init to match that state: queues -> ICC + controller
+power ("venus" pd + core/iface clks) + AHB clk -> fw load/auth ->
+HW-side power (vcodec0) + OPP + preset regs + IRQ -> boot_firmware ->
+HW-mode switch. iris_vpu_interrupt_init() loses its static so the core
+init can call it after firmware load.
+diff --git a/drivers/media/platform/qcom/iris/iris_core.c b/drivers/media/platform/qcom/iris/iris_core.c
+index 8c335db..88da289 100644
+--- a/drivers/media/platform/qcom/iris/iris_core.c
++++ b/drivers/media/platform/qcom/iris/iris_core.c
+@@ -68,36 +68,73 @@ int iris_core_init(struct iris_core *core)
+ 	if (ret)
+ 		goto error;
+ 
+-	ret = iris_vpu_power_on(core);
++	/*
++	 * QCS6490 TZ rejects PAS init_image (-EINVAL) unless the call
++	 * happens in the exact state venus uses: "venus" GDSC on, MVSC
++	 * clocks (core/iface/bus) enabled, ICC voted, vcodec0/MVS0 still
++	 * off and no video-core MMIO writes yet. Bring the controller
++	 * side up, load + authenticate the firmware, then power the HW
++	 * side and boot.
++	 */
++	ret = iris_set_icc_bw(core, INT_MAX);
+ 	if (ret)
+ 		goto error_queue_deinit;
+ 
++	ret = iris_vpu_power_on_controller(core);
++	if (ret)
++		goto error_unvote_icc;
++
++	ret = iris_prepare_enable_clock(core, IRIS_AHB_CLK);
++	if (ret)
++		goto error_power_off_ctrl;
++
+ 	ret = iris_fw_load(core);
+ 	if (ret)
+-		goto error_power_off;
++		goto error_power_off_ctrl_clk;
+ 
+-	ret = iris_vpu_boot_firmware(core);
++	ret = core->iris_platform_data->vpu_ops->power_on_hw(core);
+ 	if (ret)
+ 		goto error_unload_fw;
+ 
++	iris_opp_set_rate(core->dev, core->power.clk_freq ?
++			  core->power.clk_freq : (u32)ULONG_MAX);
++
++	iris_vpu_set_preset_registers(core);
++
++	iris_vpu_interrupt_init(core);
++	core->intr_status = 0;
++	enable_irq(core->irq);
++
++	ret = iris_vpu_boot_firmware(core);
++	if (ret)
++		goto error_unload_fw_power_off;
++
+ 	ret = iris_vpu_switch_to_hwmode(core);
+ 	if (ret)
+-		goto error_unload_fw;
++		goto error_unload_fw_power_off;
+ 
+ 	core->iris_firmware_data->init_hfi_ops(core);
+ 
+ 	ret = iris_hfi_core_init(core);
+ 	if (ret)
+-		goto error_unload_fw;
++		goto error_unload_fw_power_off;
+ 
+ 	mutex_unlock(&core->lock);
+ 
+ 	return iris_wait_for_system_response(core);
+ 
+-error_unload_fw:
++error_unload_fw_power_off:
+ 	iris_fw_unload(core);
+-error_power_off:
+ 	iris_vpu_power_off(core);
++	goto error_queue_deinit;
++error_unload_fw:
++	iris_fw_unload(core);
++error_power_off_ctrl_clk:
++	iris_disable_unprepare_clock(core, IRIS_AHB_CLK);
++error_power_off_ctrl:
++	iris_vpu_power_off_controller(core);
++error_unvote_icc:
++	iris_unset_icc_bw(core);
+ error_queue_deinit:
+ 	iris_hfi_queues_deinit(core);
+ error:
+diff --git a/drivers/media/platform/qcom/iris/iris_vpu_common.c b/drivers/media/platform/qcom/iris/iris_vpu_common.c
+index e4847c1..b0d040c 100644
+--- a/drivers/media/platform/qcom/iris/iris_vpu_common.c
++++ b/drivers/media/platform/qcom/iris/iris_vpu_common.c
+@@ -31,7 +31,7 @@
+ #define UC_REGION_ADDR				(CPU_CS_BASE_OFFS + 0x64)
+ #define UC_REGION_SIZE				(CPU_CS_BASE_OFFS + 0x68)
+ 
+-static void iris_vpu_interrupt_init(struct iris_core *core)
++void iris_vpu_interrupt_init(struct iris_core *core)
+ {
+ 	u32 mask_val;
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_vpu_common.h b/drivers/media/platform/qcom/iris/iris_vpu_common.h
+index 09799a3..798f8a6 100644
+--- a/drivers/media/platform/qcom/iris/iris_vpu_common.h
++++ b/drivers/media/platform/qcom/iris/iris_vpu_common.h
+@@ -43,5 +43,6 @@ void iris_vpu35_vpu4x_program_bootup_registers(struct iris_core *core);
+ u64 iris_vpu3x_vpu4x_calculate_frequency(struct iris_inst *inst, size_t data_size);
+ 
+ void iris_vpu_set_preset_registers(struct iris_core *core);
++void iris_vpu_interrupt_init(struct iris_core *core);
+ 
+ #endif
