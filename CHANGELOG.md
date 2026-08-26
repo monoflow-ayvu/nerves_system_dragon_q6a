@@ -1,17 +1,5 @@
 # Changelog
 
-## v0.10.3
-
-- **VPU/iris: run TZ PIL calls in venus's exact power state** — v0.10.2
-  bisect proved the image's PIL path is healthy (venus + Gen1 encode
-  fine on it), isolating the -22 to iris's power/call context. Patch
-  0005 (rewritten) splits `iris_core_init`: controller side up first
-  ("venus" GDSC + MVSC core/iface/bus clocks + ICC), firmware
-  load/auth, then HW side (vcodec0/MVS0), OPP, preset registers, IRQ,
-  boot. This is the precise state venus holds at PAS time — between
-  v0.10.0's too-much and v0.10.1's too-little.
-
-## v0.10.2
 ## v0.10.2
 
 - **VPU: bisect build — venus re-enabled on sc7280, iris disabled**
