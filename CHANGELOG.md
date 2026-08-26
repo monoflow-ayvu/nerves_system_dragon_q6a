@@ -1,18 +1,5 @@
 # Changelog
 
-## v0.10.2
-
-- **VPU: bisect build — venus re-enabled on sc7280, iris disabled**
-  (`# CONFIG_VIDEO_QCOM_IRIS is not set`). v0.10.0/v0.10.1 both failed
-  PAS `init_image` (-22) under iris regardless of firmware-load
-  ordering; this build restores the venus driver on the *same* image
-  (same kernel, patches 0001–0005, Gen2 blob, `dma-coherent` DT) to
-  split the fault: venus works ⇒ bug is inside the iris backport;
-  venus fails too ⇒ something else in the v0.10.x patchset broke PIL
-  for peripheral 9. App team: expect the working VPU back (with the
-  known wedge risk) on this build.
-
-## v0.10.1
 ## v0.10.1
 
 - **VPU/iris: fix PAS firmware rejection (-22) on QCS6490** — v0.10.0
