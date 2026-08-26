@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.10.5
+
+**v0.10.4's venus patch is withdrawn** — hardware validation on the
+Dragon Q6A showed that collapsing the VPU without the firmware's
+prepare-power-collapse handshake leaves the core unbootable on the next
+resume (`failed to reset venus core` in `venus_boot_core()`, until
+reboot). This release replaces it with the pre-decided fallback:
+disable runtime suspend entirely on the no-TZ path. Still the v0.9.5
+tree plus kernel patches. OTA from any v0.6.x+ is safe.
+
+- **Kernel: venus never power-collapses on no-TZ** — patch
+  `0001-media-venus-never-collapse-vpu-on-no-tz.patch` makes
+  `venus_runtime_suspend()` a no-op when `!core->use_tz`. The VPU stays
+  powered across sessions, so both known wedge vectors become
+  unreachable: the intermittent idle-poll `-ETIMEDOUT` in
+  `venus_suspend_3xx()` and the resume-after-collapse boot failure.
+  Resume needs no firmware handshake (`venus_power_on()` no-ops while
+  `power_enabled`). Power saving is explicitly not required.
+- **Boot-time probe caveat (board finding, app-side workaround)**: on
+  this board the VPU ARM9 does not answer `VIDC_CTRL_INIT` when venus
+  autoloads at ~5.5 s after boot (probe fails with
+  `failed to reset venus core`, and the half-probed device is
+  unrecoverable until reboot). Loading venus later (e.g. on first use)
+  probes cleanly. The example app ships
+  `rootfs_overlay/etc/modprobe.d/venus-debug-blacklist.conf` to
+  suppress boot autoload — production apps should load venus on demand
+  after boot (modprobe.d blacklist blocks autoload only; explicit
+  `modprobe venus-core` still works).
+
 ## v0.10.4
 
 **v0.10.0–v0.10.3 (iris/Gen2 VPU) were reverted as a dead end** — on this

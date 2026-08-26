@@ -1,0 +1,47 @@
+From: monoflow-ayvu <dev@ayvu>
+Date: Wed, 26 Aug 2026 14:45:00 -0300
+Subject: [PATCH] media: venus: never power-collapse the VPU on no-TZ systems
+
+QCS6490 quirk: booted via the no-TZ path (KODIAKWP firmware), the VPU
+firmware does not reliably report WFI/idle at session teardown, so the
+idle poll in venus_suspend_3xx() intermittently fails (-ETIMEDOUT;
+"wait for cpu and video core idle fail (-110)", after which every later
+session fails until reboot). Hardware validation on the Dragon Q6A
+further showed that a collapse done without the firmware's
+prepare-power-collapse handshake leaves the core unbootable on the next
+resume ("failed to reset venus core" in venus_boot_core()).
+
+Never power-collapse on no-TZ systems: venus_runtime_suspend() becomes
+a no-op, the VPU stays powered across sessions, and both failure modes
+become unreachable. Power saving is explicitly not required on this
+platform. The resume path is unaffected: venus_power_on() is a no-op
+while hdev->power_enabled is set.
+
+Signed-off-by: monoflow-ayvu <dev@ayvu>
+---
+diff --git a/drivers/media/platform/qcom/venus/core.c b/drivers/media/platform/qcom/venus/core.c
+index abf959b..8129bfc 100644
+--- a/drivers/media/platform/qcom/venus/core.c
++++ b/drivers/media/platform/qcom/venus/core.c
+@@ -580,6 +580,19 @@ static __maybe_unused int venus_runtime_suspend(struct device *dev)
+ 	const struct venus_pm_ops *pm_ops = core->pm_ops;
+ 	int ret;
+ 
++	/*
++	 * QCS6490 quirk: booted via the no-TZ path (KODIAKWP firmware),
++	 * the VPU firmware does not reliably report WFI/idle at session
++	 * teardown, so the idle poll in venus_suspend_3xx() intermittently
++	 * fails (-ETIMEDOUT), and a collapse done without the firmware's
++	 * prepare handshake leaves the core unbootable on the next resume
++	 * ("failed to reset venus core"). Never power-collapse on no-TZ
++	 * systems; power saving is not required. The resume path is
++	 * unaffected: venus_power_on() is a no-op while power_enabled.
++	 */
++	if (!core->use_tz)
++		return 0;
++
+ 	ret = hfi_core_suspend(core);
+ 	if (ret)
+ 		return ret;
+-- 
+2.51.0
