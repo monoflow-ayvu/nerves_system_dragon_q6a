@@ -24,7 +24,6 @@ lib/firmware/qcom/qcm6490/a660_zap.mbn                 Adreno 643 zap shader
 lib/firmware/qcom/qcs6490/a660_zap.mbn                 -> ../qcm6490/a660_zap.mbn (DTS zap path)
 lib/firmware/qcom/a660_sqe.fw, a660_gmu.bin            Adreno 643 SQE/GMU (drm/msm)
 lib/firmware/qcom/vpu/vpu20_p1.mbn                     Venus video firmware (VPU-2.0 Gen1, sc7280)
-lib/firmware/qcom/vpu/vpu20_p1_gen2_s6.mbn             Venus video firmware (VPU-2.0 Gen2, iris driver)
 lib/firmware/qcom/vpu-2.0/venus.mbn                    -> ../vpu/vpu20_p1.mbn (sc7280 venus path)
 lib/firmware/qcom/qcm6490/qupv3fw.elf                  GENI SE (QUP) firmware
 ```
