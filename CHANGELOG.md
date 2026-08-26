@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.10.4
+
+**v0.10.0–v0.10.3 (iris/Gen2 VPU) were reverted as a dead end** — on this
+board's KODIAKWP firmware, TrustZone rejects all Linux PIL calls for the
+video peripheral, so the iris backport can never load firmware; their tags
+and releases remain as the documented failed experiment. This release is
+the v0.9.5 tree (byte-identical) plus one kernel patch carrying the Tier-1
+venus wedge fix. OTA from any v0.6.x+ is safe.
+
+- **Kernel: venus no-TZ wedge fix** — patch
+  `0001-media-venus-skip-idle-check-on-no-tz-suspend.patch`. On the no-TZ
+  boot path (`use_tz=false`), the VPU firmware does not reliably report
+  WFI/idle at session teardown, so the idle poll in `venus_suspend_3xx()`
+  intermittently timed out (-110) and wedged the VPU until reboot. The
+  power-collapse/resume machinery itself is proven on this board, so the
+  idle check is now skipped on no-TZ systems and collapse is unconditional
+  (same shape as the older `venus_suspend_1xx` flow). v0.9.5 behavior
+  otherwise.
+
 ## v0.9.5
 
 - **ffmpeg text overlays (drawtext)** — `BR2_PACKAGE_FREETYPE=y`

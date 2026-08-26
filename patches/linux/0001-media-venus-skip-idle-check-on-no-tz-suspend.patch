@@ -1,0 +1,47 @@
+From: monoflow-ayvu <dev@ayvu>
+Date: Wed, 26 Aug 2026 08:40:00 -0300
+Subject: [PATCH] media: venus: skip idle check on no-TZ suspend
+
+QCS6490 quirk: booted via the no-TZ path (KODIAKWP firmware), the VPU
+firmware does not reliably report WFI/idle at session teardown, so the
+readx_poll_timeout(venus_cpu_and_video_core_idle, ...) in
+venus_suspend_3xx() intermittently times out (-ETIMEDOUT) and wedges
+the VPU until reboot ("wait for cpu and video core idle fail (-110)";
+every later session fails).
+
+The power-collapse and resume path itself is proven on this board, so
+skip the idle check on no-TZ systems and collapse unconditionally.
+This matches the older venus_suspend_1xx flow, which has no idle
+handshake at all.
+
+Signed-off-by: monoflow-ayvu <dev@ayvu>
+---
+ drivers/media/platform/qcom/venus/hfi_venus.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/venus/hfi_venus.c b/drivers/media/platform/qcom/venus/hfi_venus.c
+index d3da35f..e024cb4 100644
+--- a/drivers/media/platform/qcom/venus/hfi_venus.c
++++ b/drivers/media/platform/qcom/venus/hfi_venus.c
+@@ -1604,6 +1604,18 @@ static int venus_suspend_3xx(struct venus_core *core)
+ 	if (ctrl_status & CPU_CS_SCIACMDARG0_PC_READY)
+ 		goto power_off;
+ 
++	/*
++	 * QCS6490 quirk: booted via the no-TZ path (KODIAKWP firmware),
++	 * the VPU firmware does not reliably report WFI/idle at session
++	 * teardown, so this poll intermittently times out (-ETIMEDOUT)
++	 * and wedges the VPU until reboot. The power-collapse and resume
++	 * path itself is proven on this board, so skip the idle check on
++	 * no-TZ systems and collapse unconditionally (matches the older
++	 * venus_suspend_1xx flow, which has no idle handshake at all).
++	 */
++	if (!core->use_tz)
++		goto power_off;
++
+ 	/*
+ 	 * Power collapse sequence for Venus 3xx and 4xx versions:
+ 	 * 1. Check for ARM9 and video core to be idle by checking WFI bit
+-- 
+2.51.0
+
