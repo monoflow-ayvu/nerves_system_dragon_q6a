@@ -1,0 +1,777 @@
+diff --git a/drivers/media/platform/qcom/iris/iris_core.c b/drivers/media/platform/qcom/iris/iris_core.c
+index 8c335db..63e36c9 100644
+--- a/drivers/media/platform/qcom/iris/iris_core.c
++++ b/drivers/media/platform/qcom/iris/iris_core.c
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include <linux/pm_runtime.h>
++#include <linux/delay.h>
+ 
+ #include "iris_core.h"
+ #include "iris_firmware.h"
+@@ -41,8 +42,71 @@ static int iris_wait_for_system_response(struct iris_core *core)
+ 
+ 	ret = wait_for_completion_timeout(&core->core_init_done,
+ 					  msecs_to_jiffies(HW_RESPONSE_TIMEOUT_VALUE));
++	if (!ret && !core->use_tz) {
++		/* PASDBG: doorbell race probe — re-raise and wait again */
++		dev_err(core->dev, "PASDBG: first timeout, re-raising doorbell\n");
++		iris_vpu_raise_interrupt(core);
++		ret = wait_for_completion_timeout(&core->core_init_done,
++						  msecs_to_jiffies(HW_RESPONSE_TIMEOUT_VALUE));
++	}
+ 	if (!ret) {
+ 		core->state = IRIS_CORE_ERROR;
++		/* PASDBG: firmware didn't answer; dump its SFR boot log */
++		dev_err(core->dev, "PASDBG: timeout, intr_status=%08x sfr_daddr=%pa\n",
++			core->intr_status, &core->sfr_daddr);
++		if (core->iface_q_table_vaddr) {
++			u8 *b = core->iface_q_table_vaddr;
++			u32 cmd_r, cmd_w, msg_r, msg_w;
++			u32 cmd_hdr_off = 0x120; /* fat header: q_hdr[0] at qhdr0_offset */
++
++			cmd_r = *(u32 *)(b + cmd_hdr_off + 12 * 4);
++			cmd_w = *(u32 *)(b + cmd_hdr_off + 13 * 4);
++			msg_r = *(u32 *)(b + cmd_hdr_off + 0x38 + 12 * 4);
++			msg_w = *(u32 *)(b + cmd_hdr_off + 0x38 + 13 * 4);
++			dev_err(core->dev, "PASDBG idx: cmd r=%u w=%u msg r=%u w=%u\n",
++				cmd_r, cmd_w, msg_r, msg_w);
++		}
++		if (core->sfr_vaddr) {
++			u32 *sfr = core->sfr_vaddr;
++			int i;
++
++			for (i = 0; i < 16; i += 4)
++				dev_err(core->dev, "PASDBG SFR+%02x: %08x %08x %08x %08x\n",
++					i * 4, sfr[i], sfr[i+1], sfr[i+2], sfr[i+3]);
++			dev_err(core->dev, "PASDBG SFR ascii: %.60s\n",
++				(char *)core->sfr_vaddr + 4);
++		}
++		if (core->iface_q_table_vaddr) {
++			u32 *qt = core->iface_q_table_vaddr;
++			int i;
++
++			for (i = 0; i < 16; i += 4)
++				dev_err(core->dev, "PASDBG QTBL+%02x: %08x %08x %08x %08x\n",
++					i * 4, qt[i], qt[i+1], qt[i+2], qt[i+3]);
++			for (i = 0x120 / 4; i < 0x120 / 4 + 32; i += 4)
++				dev_err(core->dev, "PASDBG QHDR+%03x: %08x %08x %08x %08x\n",
++					i * 4, qt[i], qt[i+1], qt[i+2], qt[i+3]);
++		}
++		if (core->message_queue.kernel_vaddr) {
++			u32 *mq = core->message_queue.kernel_vaddr;
++			int i;
++
++			for (i = 0; i < 24; i += 4)
++				dev_err(core->dev, "PASDBG MSGQ+%03x: %08x %08x %08x %08x\n",
++					i * 4, mq[i], mq[i+1], mq[i+2], mq[i+3]);
++		}
++		if (core->command_queue.kernel_vaddr) {
++			u32 *cq = core->command_queue.kernel_vaddr;
++			int i;
++
++			for (i = 0; i < 20; i += 4)
++				dev_err(core->dev, "PASDBG CMDQ+%03x: %08x %08x %08x %08x\n",
++					i * 4, cq[i], cq[i+1], cq[i+2], cq[i+3]);
++		}
++		if (core->debug_queue.kernel_vaddr) {
++			u8 *dq = core->debug_queue.kernel_vaddr;
++			dev_err(core->dev, "PASDBG DBGQ ascii: %.80s\n", dq);
++		}
+ 		return -ETIMEDOUT;
+ 	}
+ 
+@@ -68,36 +132,131 @@ int iris_core_init(struct iris_core *core)
+ 	if (ret)
+ 		goto error;
+ 
+-	ret = iris_vpu_power_on(core);
++	ret = iris_set_icc_bw(core, INT_MAX);
+ 	if (ret)
+ 		goto error_queue_deinit;
+ 
++	ret = iris_vpu_power_on_controller(core);
++	if (ret)
++		goto error_unvote_icc;
++
++	ret = iris_prepare_enable_clock(core, IRIS_AHB_CLK);
++	if (ret)
++		goto error_power_off_ctrl;
++
+ 	ret = iris_fw_load(core);
+ 	if (ret)
+-		goto error_power_off;
++		goto error_power_off_ctrl_clk;
+ 
+-	ret = iris_vpu_boot_firmware(core);
++	if (!core->use_tz) {
++		/*
++		 * No-TZ boot (QCS6490): mimic venus's proven sequence exactly —
++		 * firmware is loaded and the core reset released, then the VPU
++		 * is power-collapsed, and only the re-power + CTRL_INIT
++		 * handshake that follows starts the HFI loop. The firmware
++		 * image and IOMMU mapping persist in the reserved DDR region.
++		 */
++		dev_info(core->dev, "PASDBG: loaded, power-cycling before handshake\n");
++		iris_vpu_power_off_controller(core);
++		iris_disable_unprepare_clock(core, IRIS_AHB_CLK);
++		iris_unset_icc_bw(core);
++
++		msleep(100);
++
++		ret = iris_set_icc_bw(core, INT_MAX);
++		if (ret)
++			goto error_unload_fw;
++		ret = iris_vpu_power_on_controller(core);
++		if (ret)
++			goto error_unload_fw;
++		ret = iris_prepare_enable_clock(core, IRIS_AHB_CLK);
++		if (ret)
++			goto error_unload_fw;
++
++		iris_vpu_reset_cpu_no_tz(core);
++
++		iris_vpu_set_preset_registers(core);
++
++		iris_vpu_interrupt_init(core);
++		core->intr_status = 0;
++		enable_irq(core->irq);
++
++		core->iris_firmware_data->init_hfi_ops(core);
++
++		ret = iris_hfi_core_init(core);
++		dev_info(core->dev, "PASDBG: pre-boot hfi_core_init ret=%d cmdq_w=%u\n", ret,
++			 core->command_queue.qhdr ? core->command_queue.qhdr->write_idx : 9999);
++		if (ret)
++			goto error_unload_fw;
++
++		ret = iris_vpu_boot_firmware(core);
++		dev_info(core->dev, "PASDBG: boot_firmware ret=%d\n", ret);
++		if (ret)
++			goto error_unload_fw;
++
++		mutex_unlock(&core->lock);
++
++		ret = iris_wait_for_system_response(core);
++
++		mutex_lock(&core->lock);
++		if (ret)
++			goto error_unload_fw;
++
++		ret = core->iris_platform_data->vpu_ops->power_on_hw(core);
++		if (ret)
++			goto error_unload_fw;
++
++		iris_opp_set_rate(core->dev, core->power.clk_freq ?
++				  core->power.clk_freq : (u32)ULONG_MAX);
++
++		mutex_unlock(&core->lock);
++
++		return 0;
++	}
++
++	ret = core->iris_platform_data->vpu_ops->power_on_hw(core);
+ 	if (ret)
+ 		goto error_unload_fw;
+ 
++	iris_opp_set_rate(core->dev, core->power.clk_freq ?
++			  core->power.clk_freq : (u32)ULONG_MAX);
++
++	iris_vpu_set_preset_registers(core);
++
++	iris_vpu_interrupt_init(core);
++	core->intr_status = 0;
++	enable_irq(core->irq);
++
++	ret = iris_vpu_boot_firmware(core);
++	if (ret)
++		goto error_unload_fw_power_off;
++
+ 	ret = iris_vpu_switch_to_hwmode(core);
+ 	if (ret)
+-		goto error_unload_fw;
++		goto error_unload_fw_power_off;
+ 
+ 	core->iris_firmware_data->init_hfi_ops(core);
+ 
+ 	ret = iris_hfi_core_init(core);
+ 	if (ret)
+-		goto error_unload_fw;
++		goto error_unload_fw_power_off;
+ 
+ 	mutex_unlock(&core->lock);
+ 
+ 	return iris_wait_for_system_response(core);
+ 
+-error_unload_fw:
++error_unload_fw_power_off:
+ 	iris_fw_unload(core);
+-error_power_off:
+ 	iris_vpu_power_off(core);
++	goto error_queue_deinit;
++error_unload_fw:
++	iris_fw_unload(core);
++error_power_off_ctrl_clk:
++	iris_disable_unprepare_clock(core, IRIS_AHB_CLK);
++error_power_off_ctrl:
++	iris_vpu_power_off_controller(core);
++error_unvote_icc:
++	iris_unset_icc_bw(core);
+ error_queue_deinit:
+ 	iris_hfi_queues_deinit(core);
+ error:
+diff --git a/drivers/media/platform/qcom/iris/iris_core.h b/drivers/media/platform/qcom/iris/iris_core.h
+index 24da604..0599433 100644
+--- a/drivers/media/platform/qcom/iris/iris_core.h
++++ b/drivers/media/platform/qcom/iris/iris_core.h
+@@ -111,6 +111,12 @@ struct iris_core {
+ 	struct iris_iface_q_info		message_queue;
+ 	struct iris_iface_q_info		debug_queue;
+ 	struct mutex				lock; /* lock for core related operations */
++	struct device				*fw_dev;
++	struct iommu_domain			*fw_iommu_domain;
++	phys_addr_t				fw_mem_phys;
++	size_t					fw_mem_size;
++	size_t					fw_mapped_mem_size;
++	bool					use_tz;
+ 	u8					*response_packet;
+ 	u32					header_id;
+ 	u32					packet_id;
+diff --git a/drivers/media/platform/qcom/iris/iris_firmware.c b/drivers/media/platform/qcom/iris/iris_firmware.c
+index 21cdf1c..b1caeed 100644
+--- a/drivers/media/platform/qcom/iris/iris_firmware.c
++++ b/drivers/media/platform/qcom/iris/iris_firmware.c
+@@ -6,15 +6,86 @@
+ #include <linux/firmware.h>
+ #include <linux/firmware/qcom/qcom_pas.h>
+ #include <linux/firmware/qcom/qcom_scm.h>
++#include <linux/crc32.h>
++#include <linux/iommu.h>
++#include <linux/of.h>
++#include <linux/of_device.h>
++#include <linux/platform_device.h>
++#include <linux/elf.h>
+ #include <linux/of_address.h>
+ #include <linux/of_reserved_mem.h>
+ #include <linux/soc/qcom/mdt_loader.h>
+ 
+ #include "iris_core.h"
+ #include "iris_firmware.h"
++#include "iris_vpu_register_defines.h"
+ 
+ #define IRIS_PAS_ID				9
+ 
++/* PAS-DBG: temporary instrumented replacement for qcom_mdt_load() that
++ * logs every argument and result of the TZ PIL sequence. DEBUG ONLY.
++ */
++static int iris_mdt_load_dbg(struct iris_core *core, const struct firmware *fw,
++			     const char *fw_name, void *mem_virt,
++			     phys_addr_t mem_phys, size_t res_size)
++{
++	struct device *dev = core->dev;
++	const struct elf32_hdr *ehdr = (const struct elf32_hdr *)fw->data;
++	const struct elf32_phdr *phdrs = (const struct elf32_phdr *)(fw->data + ehdr->e_phoff);
++	phys_addr_t min_addr = PHYS_ADDR_MAX, max_addr = 0;
++	bool relocate = false;
++	size_t md_len = 0;
++	void *metadata;
++	int ret, i;
++
++	for (i = 0; i < ehdr->e_phnum; i++) {
++		const struct elf32_phdr *phdr = &phdrs[i];
++
++		if (phdr->p_type != PT_LOAD || !phdr->p_memsz)
++			continue;
++		if (phdr->p_flags & QCOM_MDT_RELOCATABLE)
++			relocate = true;
++		if (phdr->p_paddr < min_addr)
++			min_addr = phdr->p_paddr;
++		if (phdr->p_paddr + phdr->p_memsz > max_addr)
++			max_addr = ALIGN(phdr->p_paddr + phdr->p_memsz, SZ_4K);
++	}
++
++	metadata = qcom_mdt_read_metadata(fw, &md_len, fw_name, dev);
++	if (IS_ERR(metadata)) {
++		ret = PTR_ERR(metadata);
++		dev_err(dev, "PASDBG %s: read_metadata ret=%d\n", fw_name, ret);
++		return ret;
++	}
++
++	dev_info(dev, "PASDBG %s: fwsize=%zu mdlen=%zu crc=%08x reloc=%d min=%pa max=%pa mem_phys=%pa res=%zu pasid=%d\n",
++		 fw_name, fw->size, md_len, crc32_le(0, metadata, md_len),
++		 relocate, &min_addr, &max_addr, &mem_phys, res_size, IRIS_PAS_ID);
++
++	dev_info(dev, "PASDBG: pas_supported(9)=%d supported(0)=%d\n",
++		 qcom_scm_pas_supported(IRIS_PAS_ID), qcom_scm_pas_supported(0));
++
++	ret = qcom_scm_pas_init_image(IRIS_PAS_ID, metadata, md_len, NULL);
++	dev_info(dev, "PASDBG %s: init_image ret=%d\n", fw_name, ret);
++	kfree(metadata);
++	if (ret)
++		return ret;
++
++	if (relocate) {
++		ret = qcom_scm_pas_mem_setup(IRIS_PAS_ID, mem_phys, max_addr - min_addr);
++		dev_info(dev, "PASDBG %s: mem_setup ret=%d size=%pa\n",
++			 fw_name, ret, &(phys_addr_t){max_addr - min_addr});
++		if (ret)
++			return ret;
++	}
++
++	ret = qcom_mdt_load_no_init(dev, fw, fw_name, mem_virt, mem_phys, res_size, NULL);
++	dev_info(dev, "PASDBG %s: load_no_init ret=%d\n", fw_name, ret);
++
++	return ret;
++}
++
++
+ #define MAX_FIRMWARE_NAME_SIZE	128
+ 
+ /* Detect Gen2 firmware by scanning the blob for:
+@@ -121,19 +192,28 @@ static int iris_load_fw_to_memory(struct iris_core *core)
+ 	int ret;
+ 
+ 	ret = of_reserved_mem_region_to_resource(dev->of_node, 0, &res);
+-	if (ret)
++	if (ret) {
++		dev_err(dev, "PASDBG: reserved_mem ret=%d\n", ret);
+ 		return ret;
++	}
+ 
+ 	mem_phys = res.start;
+ 	res_size = resource_size(&res);
+ 
++	core->fw_mem_phys = mem_phys;
++	core->fw_mem_size = res_size;
++
+ 	firmware = iris_detect_firmware(core, &fw_name);
+-	if (IS_ERR(firmware))
++	if (IS_ERR(firmware)) {
++		dev_err(dev, "PASDBG: detect ret=%ld\n", PTR_ERR(firmware));
+ 		return PTR_ERR(firmware);
++	}
+ 
+ 	core->iris_firmware_data = core->iris_firmware_desc->firmware_data;
+ 
+ 	fw_size = qcom_mdt_get_size(firmware);
++	dev_info(dev, "PASDBG: detect picked %s fwsize=%zu mdt_size=%zd\n",
++		 fw_name, firmware->size, fw_size);
+ 	if (fw_size < 0 || res_size < (size_t)fw_size) {
+ 		ret = -EINVAL;
+ 		goto err_release_fw;
+@@ -145,8 +225,15 @@ static int iris_load_fw_to_memory(struct iris_core *core)
+ 		goto err_release_fw;
+ 	}
+ 
+-	ret = qcom_mdt_load(dev, firmware, fw_name,
+-			    IRIS_PAS_ID, mem_virt, mem_phys, res_size, NULL);
++	if (core->use_tz)
++		ret = iris_mdt_load_dbg(core, firmware, fw_name,
++					mem_virt, mem_phys, res_size);
++	else {
++		ret = qcom_mdt_load_no_init(dev, firmware, fw_name, mem_virt,
++					    mem_phys, res_size, NULL);
++		dev_info(dev, "PASDBG: no_tz load ret=%d first1k_crc=%08x\n", ret,
++			 ret ? 0 : crc32_le(0, mem_virt, 1024));
++	}
+ 
+ 	memunmap(mem_virt);
+ err_release_fw:
+@@ -155,6 +242,64 @@ err_release_fw:
+ 	return ret;
+ }
+ 
++#define IRIS_FW_START_ADDR	0x0
++
++void iris_vpu_reset_cpu_no_tz(struct iris_core *core)
++{
++	u32 fw_size = core->fw_mapped_mem_size;
++
++	writel(0, core->reg_base + WRAPPER_TZ_FW_START_ADDR);
++	writel(fw_size, core->reg_base + WRAPPER_TZ_FW_END_ADDR);
++	writel(0, core->reg_base + WRAPPER_TZ_CPA_START_ADDR);
++	writel(fw_size, core->reg_base + WRAPPER_TZ_CPA_END_ADDR);
++	writel(fw_size, core->reg_base + WRAPPER_TZ_NONPIX_START_ADDR);
++	writel(fw_size, core->reg_base + WRAPPER_TZ_NONPIX_END_ADDR);
++
++	/* Bring XTSS out of reset */
++	writel(0, core->reg_base + WRAPPER_TZ_XTSS_SW_RESET);
++}
++
++static int iris_fw_boot_no_tz(struct iris_core *core)
++{
++	int ret;
++
++	if (!core->fw_dev)
++		return -EPROBE_DEFER;
++
++	core->fw_mapped_mem_size = core->fw_mem_size;
++
++	ret = iommu_map(core->fw_iommu_domain, IRIS_FW_START_ADDR,
++			core->fw_mem_phys, core->fw_mem_size,
++			IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV, GFP_KERNEL);
++	if (ret) {
++		dev_err(core->dev, "could not map video firmware region\n");
++		return ret;
++	}
++
++	iris_vpu_reset_cpu_no_tz(core);
++
++	return 0;
++}
++
++static int iris_fw_shutdown_no_tz(struct iris_core *core)
++{
++	size_t unmapped;
++
++	/* Assert the reset to XTSS */
++	writel(BIT(0), core->reg_base + WRAPPER_TZ_XTSS_SW_RESET);
++
++	if (core->fw_mapped_mem_size && core->fw_iommu_domain) {
++		unmapped = iommu_unmap(core->fw_iommu_domain, IRIS_FW_START_ADDR,
++				       core->fw_mapped_mem_size);
++		if (unmapped != core->fw_mapped_mem_size)
++			dev_err(core->dev, "failed to unmap firmware\n");
++		else
++			core->fw_mapped_mem_size = 0;
++	}
++
++	return 0;
++}
++
+ int iris_fw_load(struct iris_core *core)
+ {
+ 	const struct tz_cp_config *cp_config;
+@@ -166,6 +311,9 @@ int iris_fw_load(struct iris_core *core)
+ 		return ret;
+ 	}
+ 
++	if (!core->use_tz)
++		return iris_fw_boot_no_tz(core);
++
+ 	ret = qcom_pas_auth_and_reset(IRIS_PAS_ID);
+ 	if (ret)  {
+ 		dev_err(core->dev, "auth and reset failed: %d\n", ret);
+@@ -190,10 +338,96 @@ int iris_fw_load(struct iris_core *core)
+ 
+ int iris_fw_unload(struct iris_core *core)
+ {
++	if (!core->use_tz)
++		return iris_fw_shutdown_no_tz(core);
++
+ 	return qcom_pas_shutdown(IRIS_PAS_ID);
+ }
+ 
+ int iris_set_hw_state(struct iris_core *core, bool resume)
+ {
++	if (!core->use_tz) {
++		if (resume)
++			iris_vpu_reset_cpu_no_tz(core);
++		return 0;
++	}
++
+ 	return qcom_pas_set_remote_state(resume, 0);
+ }
++
++int iris_fw_init(struct iris_core *core)
++{
++	struct platform_device_info info;
++	struct iommu_domain *iommu_dom;
++	struct platform_device *pdev;
++	struct device_node *np;
++	int ret;
++
++	np = of_get_child_by_name(core->dev->of_node, "video-firmware");
++	dev_info(core->dev, "PASDBG: fw_init of_node=%pOF video-firmware child=%p\n",
++		 core->dev->of_node, np);
++	if (!np) {
++		core->use_tz = true;
++		return 0;
++	}
++
++	memset(&info, 0, sizeof(info));
++	info.fwnode = &np->fwnode;
++	info.parent = core->dev;
++	info.name = np->name;
++	info.dma_mask = DMA_BIT_MASK(32);
++
++	pdev = platform_device_register_full(&info);
++	if (IS_ERR(pdev)) {
++		of_node_put(np);
++		return PTR_ERR(pdev);
++	}
++
++	pdev->dev.of_node = np;
++
++	ret = of_dma_configure(&pdev->dev, np, true);
++	if (ret) {
++		dev_err(core->dev, "video-firmware dma configure fail\n");
++		goto err_unregister;
++	}
++
++	core->fw_dev = &pdev->dev;
++
++	iommu_dom = iommu_paging_domain_alloc(core->fw_dev);
++	if (IS_ERR(iommu_dom)) {
++		dev_err(core->fw_dev, "failed to allocate iommu domain\n");
++		ret = PTR_ERR(iommu_dom);
++		goto err_unregister;
++	}
++
++	ret = iommu_attach_device(iommu_dom, core->fw_dev);
++	if (ret) {
++		dev_err(core->fw_dev, "could not attach iommu\n");
++		goto err_iommu_free;
++	}
++
++	core->fw_iommu_domain = iommu_dom;
++
++	of_node_put(np);
++
++	return 0;
++
++err_iommu_free:
++	iommu_domain_free(iommu_dom);
++err_unregister:
++	platform_device_unregister(pdev);
++	of_node_put(np);
++	return ret;
++}
++
++void iris_fw_deinit(struct iris_core *core)
++{
++	if (!core->fw_dev)
++		return;
++
++	iommu_detach_device(core->fw_iommu_domain, core->fw_dev);
++	iommu_domain_free(core->fw_iommu_domain);
++	core->fw_iommu_domain = NULL;
++	platform_device_unregister(to_platform_device(core->fw_dev));
++	core->fw_dev = NULL;
++}
+diff --git a/drivers/media/platform/qcom/iris/iris_firmware.h b/drivers/media/platform/qcom/iris/iris_firmware.h
+index e833ecd..98ef094 100644
+--- a/drivers/media/platform/qcom/iris/iris_firmware.h
++++ b/drivers/media/platform/qcom/iris/iris_firmware.h
+@@ -11,5 +11,8 @@ struct iris_core;
+ int iris_fw_load(struct iris_core *core);
+ int iris_fw_unload(struct iris_core *core);
+ int iris_set_hw_state(struct iris_core *core, bool resume);
++int iris_fw_init(struct iris_core *core);
++void iris_fw_deinit(struct iris_core *core);
++void iris_vpu_reset_cpu_no_tz(struct iris_core *core);
+ 
+ #endif
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_common.c b/drivers/media/platform/qcom/iris/iris_hfi_common.c
+index 8769ec6..88b26bc 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_common.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_common.c
+@@ -107,6 +107,8 @@ irqreturn_t iris_hfi_isr_handler(int irq, void *data)
+ 	mutex_lock(&core->lock);
+ 	pm_runtime_mark_last_busy(core->dev);
+ 	iris_vpu_clear_interrupt(core);
++	dev_info(core->dev, "PASDBG: irq at %lu ms intr=%08x\n",
++		 jiffies_to_msecs(jiffies), core->intr_status);
+ 	mutex_unlock(&core->lock);
+ 
+ 	core->hfi_sys_ops->sys_hfi_response_handler(core);
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c b/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
+index f6e9cbf..5be3cca 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
+@@ -60,6 +60,10 @@ static int iris_hfi_gen1_sys_interframe_powercollapse(struct iris_core *core)
+ 	u32 packet_size;
+ 	int ret;
+ 
++	/* QCS6490 no-TZ: this firmware wedges on CODEC_POWER_PLANE_CTRL */
++	if (!core->use_tz)
++		return 0;
++
+ 	packet_size = struct_size(pkt, data, 1) + sizeof(*hfi);
+ 	pkt = kzalloc(packet_size, GFP_KERNEL);
+ 	if (!pkt)
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_queue.c b/drivers/media/platform/qcom/iris/iris_hfi_queue.c
+index bf6db23..7448690 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_queue.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_queue.c
+@@ -226,12 +226,14 @@ static void
+ iris_hfi_queue_init(struct iris_core *core, u32 queue_id, struct iris_iface_q_info *iface_q)
+ {
+ 	struct iris_hfi_queue_table_header *q_tbl_hdr = core->iface_q_table_vaddr;
+-	u32 offset = sizeof(*q_tbl_hdr) + (queue_id * IFACEQ_QUEUE_SIZE);
++	u32 offset;
++
++	offset = sizeof(*q_tbl_hdr) + (queue_id * IFACEQ_QUEUE_SIZE);
++	iface_q->qhdr = &q_tbl_hdr->q_hdr[queue_id];
+ 
+ 	iface_q->device_addr = core->iface_q_table_daddr + offset;
+ 	iface_q->kernel_vaddr =
+ 			(void *)((char *)core->iface_q_table_vaddr + offset);
+-	iface_q->qhdr = &q_tbl_hdr->q_hdr[queue_id];
+ 
+ 	iris_hfi_queue_set_header(core, queue_id, iface_q);
+ }
+@@ -250,6 +252,7 @@ int iris_hfi_queues_init(struct iris_core *core)
+ 
+ 	/* Iris hardware requires 4K queue alignment */
+ 	queue_size = ALIGN((sizeof(*q_tbl_hdr) + (IFACEQ_QUEUE_SIZE * IFACEQ_NUMQ)), SZ_4K);
++
+ 	core->iface_q_table_vaddr = dma_alloc_attrs(core->dev, queue_size,
+ 						    &core->iface_q_table_daddr,
+ 						    GFP_KERNEL, DMA_ATTR_WRITE_COMBINE);
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_queue.h b/drivers/media/platform/qcom/iris/iris_hfi_queue.h
+index 2174fc5..b369fdd 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_queue.h
++++ b/drivers/media/platform/qcom/iris/iris_hfi_queue.h
+@@ -29,6 +29,12 @@ struct iris_core;
+  */
+ #define SFR_SIZE			SZ_4K /* Iris hardware requires 4K queue alignment */
+ 
++/* venus v6 compact queue-table layout (used on the no-TZ path): the Gen1
++ * firmware on QCS6490 parses the queue table in this layout. */
++#define IRIS_V6_QHDR0_OFFSET		0x18
++#define IRIS_V6_TABLE_SIZE		0xc0
++#define IRIS_V6_QUEUE_SIZE		0xc8000
++
+ #define IFACEQ_QUEUE_SIZE		(IFACEQ_MAX_PKT_SIZE * \
+ 					 IFACEQ_MAX_BUF_COUNT * IFACE_MAX_PARALLEL_SESSIONS)
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_probe.c b/drivers/media/platform/qcom/iris/iris_probe.c
+index 2bc1341..4885e78 100644
+--- a/drivers/media/platform/qcom/iris/iris_probe.c
++++ b/drivers/media/platform/qcom/iris/iris_probe.c
+@@ -13,6 +13,7 @@
+ #include <linux/soc/qcom/ubwc.h>
+ 
+ #include "iris_core.h"
++#include "iris_firmware.h"
+ #include "iris_ctrls.h"
+ #include "iris_vidc.h"
+ 
+@@ -212,6 +213,8 @@ static void iris_remove(struct platform_device *pdev)
+ 
+ 	v4l2_device_unregister(&core->v4l2_dev);
+ 
++	iris_fw_deinit(core);
++
+ 	mutex_destroy(&core->lock);
+ }
+ 
+@@ -274,10 +277,28 @@ static int iris_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = v4l2_device_register(dev, &core->v4l2_dev);
++	ret = iris_fw_init(core);
+ 	if (ret)
+ 		return ret;
+ 
++	/*
++	 * QCS6490 quirk: this board's TZ rejects Linux PIL for the video
++	 * peripheral (-EINVAL on init_image from any caller); when the DT
++	 * carries a video-firmware subnode iris boots the core directly
++	 * (no-TZ path, like venus). Load and boot the firmware at probe
++	 * time, before the video nodes exist — early boot is also the only
++	 * window where the VPU TZ side is guaranteed quiescent.
++	 */
++	platform_set_drvdata(pdev, core);
++
++	ret = iris_core_init(core);
++	if (ret)
++		dev_err(dev, "early core init failed %d (will retry on open)\n", ret);
++
++	ret = v4l2_device_register(dev, &core->v4l2_dev);
++	if (ret)
++		goto err_fw_deinit;
++
+ 	ret = iris_register_video_device(core, DECODER);
+ 	if (ret)
+ 		goto err_v4l2_unreg;
+@@ -286,8 +307,6 @@ static int iris_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		goto err_vdev_unreg_dec;
+ 
+-	platform_set_drvdata(pdev, core);
+-
+ 	dma_mask = core->iris_platform_data->dma_mask;
+ 
+ 	ret = dma_set_mask_and_coherent(dev, dma_mask);
+@@ -303,8 +322,18 @@ static int iris_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		goto err_vdev_unreg_enc;
+ 
++	if (!ret && core->state == IRIS_CORE_INIT) {
++		/* early core init powered the VPU outside RPM's view */
++		pm_runtime_set_active(dev);
++		pm_runtime_mark_last_busy(dev);
++	}
++
+ 	return 0;
+ 
++err_fw_deinit:
++	iris_fw_deinit(core);
++	return ret;
++
+ err_vdev_unreg_enc:
+ 	video_unregister_device(core->vdev_enc);
+ err_vdev_unreg_dec:
+diff --git a/drivers/media/platform/qcom/iris/iris_vpu_common.c b/drivers/media/platform/qcom/iris/iris_vpu_common.c
+index e4847c1..714b302 100644
+--- a/drivers/media/platform/qcom/iris/iris_vpu_common.c
++++ b/drivers/media/platform/qcom/iris/iris_vpu_common.c
+@@ -31,7 +31,7 @@
+ #define UC_REGION_ADDR				(CPU_CS_BASE_OFFS + 0x64)
+ #define UC_REGION_SIZE				(CPU_CS_BASE_OFFS + 0x68)
+ 
+-static void iris_vpu_interrupt_init(struct iris_core *core)
++void iris_vpu_interrupt_init(struct iris_core *core)
+ {
+ 	u32 mask_val;
+ 
+@@ -47,8 +47,12 @@ static void iris_vpu_setup_ucregion_memory_map(struct iris_core *core)
+ 	const struct vpu_ops *vpu_ops = core->iris_platform_data->vpu_ops;
+ 
+ 	/* Iris hardware requires 4K queue alignment */
+-	queue_size = ALIGN(sizeof(struct iris_hfi_queue_table_header) +
+-		(IFACEQ_QUEUE_SIZE * IFACEQ_NUMQ), SZ_4K);
++	if (core->use_tz)
++		queue_size = ALIGN(sizeof(struct iris_hfi_queue_table_header) +
++			(IFACEQ_QUEUE_SIZE * IFACEQ_NUMQ), SZ_4K);
++	else
++		queue_size = ALIGN(IRIS_V6_TABLE_SIZE +
++			IRIS_V6_QUEUE_SIZE * IFACEQ_NUMQ, SZ_4K);
+ 
+ 	value = (u32)core->iface_q_table_daddr;
+ 	writel(value, core->reg_base + UC_REGION_ADDR);
+diff --git a/drivers/media/platform/qcom/iris/iris_vpu_common.h b/drivers/media/platform/qcom/iris/iris_vpu_common.h
+index 09799a3..798f8a6 100644
+--- a/drivers/media/platform/qcom/iris/iris_vpu_common.h
++++ b/drivers/media/platform/qcom/iris/iris_vpu_common.h
+@@ -43,5 +43,6 @@ void iris_vpu35_vpu4x_program_bootup_registers(struct iris_core *core);
+ u64 iris_vpu3x_vpu4x_calculate_frequency(struct iris_inst *inst, size_t data_size);
+ 
+ void iris_vpu_set_preset_registers(struct iris_core *core);
++void iris_vpu_interrupt_init(struct iris_core *core);
+ 
+ #endif
+diff --git a/drivers/media/platform/qcom/iris/iris_vpu_register_defines.h b/drivers/media/platform/qcom/iris/iris_vpu_register_defines.h
+index 72168b9..be2bcf2 100644
+--- a/drivers/media/platform/qcom/iris/iris_vpu_register_defines.h
++++ b/drivers/media/platform/qcom/iris/iris_vpu_register_defines.h
+@@ -65,6 +65,15 @@
+ 
+ #define WRAPPER_TZ_CPU_STATUS			(WRAPPER_TZ_BASE_OFFS + 0x10)
+ 
++/* No-TZ boot path (venus hfi_venus_io.h equivalents, IRIS2/2.1 layout) */
++#define WRAPPER_TZ_XTSS_SW_RESET		(WRAPPER_TZ_BASE_OFFS + 0x1000)
++#define WRAPPER_TZ_CPA_START_ADDR		(WRAPPER_TZ_BASE_OFFS + 0x1020)
++#define WRAPPER_TZ_CPA_END_ADDR			(WRAPPER_TZ_BASE_OFFS + 0x1024)
++#define WRAPPER_TZ_FW_START_ADDR		(WRAPPER_TZ_BASE_OFFS + 0x1028)
++#define WRAPPER_TZ_FW_END_ADDR			(WRAPPER_TZ_BASE_OFFS + 0x102c)
++#define WRAPPER_TZ_NONPIX_START_ADDR		(WRAPPER_TZ_BASE_OFFS + 0x1030)
++#define WRAPPER_TZ_NONPIX_END_ADDR		(WRAPPER_TZ_BASE_OFFS + 0x1034)
++
+ #define WRAPPER_TZ_CTL_AXI_CLOCK_CONFIG		(WRAPPER_TZ_BASE_OFFS + 0x14)
+ #define CTL_AXI_CLK_HALT			BIT(0)
+ #define CTL_CLK_HALT				BIT(1)
