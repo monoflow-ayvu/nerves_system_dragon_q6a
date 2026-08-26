@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.10.6
+
+Rootfs packaging only; the kernel is unchanged from v0.10.5. OTA from
+any v0.6.x+ is safe.
+
+- **Venus autoload blacklist moved into the base system** — was
+  `example/rootfs_overlay/` (v0.10.5, example app only); now
+  `rootfs_overlay/etc/modprobe.d/venus.conf`, so every app built on
+  this system inherits it. On this board venus must never probe at
+  ~5.5 s after boot (`failed to reset venus core`, unrecoverable until
+  reboot); load on first use instead.
+- **README: new "VPU (Qualcomm Venus)" section** — the no-autoload
+  rule and how to load on demand (one module per busybox `modprobe`
+  call), why power-collapse is disabled, validated ffmpeg
+  `hevc_v4l2m2m` usage, and the ffmpeg exit-139 userspace race caveat.
+
 ## v0.10.5
 
 **v0.10.4's venus patch is withdrawn** — hardware validation on the

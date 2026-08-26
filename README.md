@@ -135,6 +135,53 @@ harvest is needed. **Version rule:** `cdsp.mbn` and the shipped
 
 The full frozen version tuple is in `GOAL.md`.
 
+## VPU (Qualcomm Venus)
+
+The QCS6490 video block works with the mainline `venus` driver
+(`venus-core.ko` + `venus_dec`/`venus_enc`, Gen1 firmware
+`qcom/vpu/vpu20_p1.mbn`), but on this board it runs on the **no-TZ
+path** (`use_tz=false`) and two hardware quirks shape usage:
+
+- **Never let venus autoload at boot.** Probed at ~5.5 s, the VPU ARM9
+  does not answer `VIDC_CTRL_INIT`; the probe fails
+  (`failed to reset venus core`) and the half-probed device is
+  unrecoverable until reboot. The system ships
+  `/etc/modprobe.d/venus.conf` blacklisting `venus_core`/`venus_dec`/
+  `venus_enc` from autoload (explicit `modprobe` still works). Load on
+  first use instead — it probes cleanly once the board is up:
+
+  ```sh
+  modprobe venus-core
+  modprobe venus-dec
+  modprobe venus-enc   # busybox modprobe: one module per invocation
+  ```
+
+- **Runtime power-collapse is disabled** (since v0.10.5,
+  `patches/linux/0001-media-venus-never-collapse-vpu-on-no-tz.patch`).
+  On the no-TZ path the VPU firmware does not reliably report idle at
+  session teardown (the suspend idle-poll intermittently fails `-110`
+  and wedges the VPU until reboot), and collapsing without the
+  firmware's prepare handshake leaves the core unbootable on the next
+  resume. `venus_runtime_suspend()` is therefore a no-op: the VPU stays
+  powered across sessions and both wedge vectors are unreachable. The
+  idle VPU's power draw is accepted by design.
+
+Validated (v0.10.5): 500 back-to-back 2 s HEVC encode sessions plus
+300 s + 10 s long-session checks, clean dmesg. ffmpeg usage:
+
+```sh
+ffmpeg -f lavfi -i testsrc=size=640x360:rate=30 -t 10 \
+  -c:v hevc_v4l2m2m -b:v 2000k -pix_fmt nv12 -y out.mp4
+```
+
+Caveat: ffmpeg's `hevc_v4l2m2m` encoder intermittently segfaults on
+very short encodes (~15–37% of 2 s runs) — a userspace v4l2m2m
+buffer-lifetime race, confirmed by core-dump analysis; the VPU itself
+is unaffected and the next run succeeds. Just retry on exit code 139.
+
+Note: the kernel gets its DTB from the EDK2 firmware via EFI (see
+"Boot architecture"); kernel-tree DTS changes never reach this board.
+
 ## Connectivity (Ethernet / WiFi / Bluetooth / USB)
 
 - **Ethernet**: Realtek RTL8111 on `pcie0`; `r8169` + the QMP PCIe PHY are
