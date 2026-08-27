@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.11.1
+
+Rootfs tooling only; the kernel is unchanged from v0.10.5. OTA from
+any v0.6.x+ is safe.
+
+- **Disk management toolset for userspace** — `nerves_defconfig` adds
+  smartmontools (`smartctl`, `smartd` — NVMe SMART monitoring, incl.
+  Percentage Used/attr 177), `nvme-cli` (`nvme` — format, secure-erase,
+  smart-log), util-linux binaries (`fdisk`, `sfdisk`, `blkid`, `lsblk`,
+  `blockdev`, `fstrim`, `wipefs`, `mkswap`, `blkdiscard`, `fsfreeze`,
+  `findmnt`) and dosfstools `mkfs.fat` for creating FAT volumes. The
+  app can now self-manage disks: monitor endurance, partition, format,
+  and check the filesystem it already fsck's at boot.
+
 ## v0.11.0
 
 Rootfs tooling only; the kernel is unchanged from v0.10.5. OTA from
