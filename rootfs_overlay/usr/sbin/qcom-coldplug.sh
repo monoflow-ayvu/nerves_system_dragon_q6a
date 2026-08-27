@@ -29,6 +29,27 @@ if [ -e "$OPS_FW" ] && [ -e /dev/rootdisk0 ] && [ -x /usr/bin/fwup ]; then
     /usr/bin/fwup -q -t autovalidate -d /dev/rootdisk0 "$OPS_FW" || true
 fi
 
+# 0.6 ext4 health on the app-data partition. erlinit mounts /root with no
+#     fsck pass (it has no fsck support), and this board loses power
+#     without warning, so journal aborts and error counts would otherwise
+#     accumulate unchecked forever. The BEAM is not up yet and nothing
+#     holds the partition: unmount, check, remount with the same flags
+#     erlinit.config mounts with. -y takes the default repair for every
+#     prompt; a clean journal replay or a flagged-error check costs
+#     seconds, a full forced check (not done here) would cost minutes.
+#     Never fsck a still-mounted filesystem, and never block the app on a
+#     failed check -- a degraded partition still records. timeout caps the
+#     whole thing at 10 min: a flagged-error check on healthy NVMe takes
+#     seconds-to-a-minute, so 600 s only ever fires on dying media or
+#     pathological corruption, where a bounded kill + failed remount
+#     (read-only /root, degraded boot) beats an infinitely hung pre-run-exec.
+if [ -x /sbin/fsck.ext4 ] && [ -b /dev/rootdisk0p4 ]; then
+    if umount /root 2>/dev/null; then
+        timeout -s KILL 600 /sbin/fsck.ext4 -y /dev/rootdisk0p4 || true
+        mount -t ext4 -o nodev,noatime,data=ordered,commit=60 /dev/rootdisk0p4 /root || true
+    fi
+fi
+
 # 0.5 UEFI variables. HypervisorOverride must be Enabled or VPU encode
 #     hard-resets the SoC (see docs/BOARD_QUIRKS.md "UEFI variables").
 #     Idempotent; reboots once on the first boot that flips it.

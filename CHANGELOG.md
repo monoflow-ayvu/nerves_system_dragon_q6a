@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.11.0
+
+Rootfs tooling only; the kernel is unchanged from v0.10.5. OTA from
+any v0.6.x+ is safe.
+
+- **e2fsprogs ext2/3/4 toolset shipped** — `nerves_defconfig` now
+  enables `BR2_PACKAGE_E2FSPROGS_FSCK` (e2fsck, fsck.ext2/3/4),
+  DEBUGFS, E2IMAGE, E4DEFRAG and RESIZE2FS on top of the base package
+  (mke2fs/mkfs.ext*, tune2fs, dumpe2fs, e2label, badblocks).
+- **Boot-time fsck of the app-data partition** —
+  `qcom-coldplug.sh` step 0.6 unmounts `/root` and runs
+  `fsck.ext4 -y /dev/rootdisk0p4` before the BEAM starts, then
+  remounts with erlinit's flags (`nodev,noatime,data=ordered,commit=60`).
+  erlinit has no fsck support, so journal aborts and error counts
+  previously accumulated unchecked on this power-cut-prone board.
+- **fsck can never hang boot** — the check is wrapped in
+  `timeout -s KILL 600` (busybox `CONFIG_TIMEOUT` enabled in
+  `busybox.fragment`), skipped entirely if `/root` can't be
+  unmounted, and every failure path is `|| true`. Worst case is a
+  degraded boot with a read-only `/root`, never a stuck board.
+
 ## v0.10.6
 
 Rootfs packaging only; the kernel is unchanged from v0.10.5. OTA from
