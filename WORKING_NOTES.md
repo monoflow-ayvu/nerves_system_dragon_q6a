@@ -1304,3 +1304,16 @@ toolchain) rather than a wgpu-native C ABI drop-in.
 - Git: branch `main`, 1 uncommitted file(s): WORKING_NOTES.md 
 - Last verification run recorded: 2026-07-26T19:36:22Z	T=/tmp/claude-1000/-home-fermuch-Documents-Dev-AYVU-nerves-system-dragon-q6a/b5e1265e-3d92-4e4c-9105-598d18a6100e/scratc
 - RESUME: re-read the Task/Status/Next-action sections above; trust this file over recollection.
+
+## 2026-08-27 — DONE: v0.11.0 released (CI 33068805311 all-green, release published with tarball, non-draft)
+
+Monitor CI run 33068805311 (tag v0.11.0) until green and the release
+is published with the system tarball. If it fails: diagnose, fix,
+push v0.11.1 as a new tag to retrigger. Once green, mark the GitHub release as published (undraft if draft). Ships: e2fsprogs fsck toolset,
+CONFIG_TIMEOUT, coldplug step 0.6 boot-time fsck (timeout-bounded).
+
+## 2026-08-27 — DONE: v0.11.1 released (CI 33077259287 all-green; was draft, published via gh release edit)
+
+Monitor CI run 33077259287 (tag v0.11.1) until green and release
+published (undraft if draft) with tarball. Fail → fix, bump v0.11.2.
+Ships: smartmontools, nvme-cli, util-linux disk tools, dosfstools mkfs.fat.
