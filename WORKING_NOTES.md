@@ -1317,3 +1317,31 @@ CONFIG_TIMEOUT, coldplug step 0.6 boot-time fsck (timeout-bounded).
 Monitor CI run 33077259287 (tag v0.11.1) until green and release
 published (undraft if draft) with tarball. Fail → fix, bump v0.11.2.
 Ships: smartmontools, nvme-cli, util-linux disk tools, dosfstools mkfs.fat.
+
+## 2026-09-02 — DONE: sched_ext (scx) + cgroups v2 enabled in kernel (artifact 0.11.1 rebuilt, QEMU-verified)
+
+Goal was kernel-side enablement only (no scx userspace schedulers). Three
+edits: `linux-dragon-q6a.fragment` new "sched_ext + cgroups v2" section
+(DEBUG_INFO, REDUCED unset, DEBUG_INFO_BTF, BPF_JIT_ALWAYS_ON/DEFAULT_ON,
+SCHED_CLASS_EXT, CGROUPS, CGROUP_SCHED, CFS_BANDWIDTH),
+`nerves_defconfig` +`BR2_LINUX_KERNEL_NEEDS_HOST_PAHOLE=y`,
+`erlinit.config` +`-m none:/sys/fs/cgroup:cgroup2:nodev,noexec,nosuid:`.
+Build ~49 min (DEBUG_INFO adds full DWARF to the build tree, not the Image).
+
+Verified, all in one session:
+- Merged `.config` in volume `nerves_system_dragon_q6a-fRYwMporA4z1uOV6`:
+  all nine symbols =y, `# CONFIG_DEBUG_INFO_REDUCED is not set`.
+- sched_ext linked: 42 `sched_ext` symbols in `System.map` (ext.o is
+  folded into `kernel/sched/build_policy.o` in 6.18 — do NOT look for a
+  standalone ext.o), `__start_BTF`/`__stop_BTF` in vmlinux.
+- `test/qemu-smoke.sh` PASS (all hard checks); serial log has zero
+  `Cannot mount none at /sys/fs/cgroup`.
+- Runtime probe in QEMU (one-off `test/work/qemu-probe.sh`, boots the
+  smoke disk with `-serial pty` and types into IEx):
+  `/sys/kernel/sched_ext/state` → `disabled`; `/proc/mounts` has the
+  cgroup2 line; `cgroup.controllers` = `cpuset cpu io memory hugetlb pids`.
+  NOTE: the mount's source field is `none` (erlinit `-m none:...`), so
+  grep `/proc/mounts` for `/sys/fs/cgroup cgroup2`, never for a leading
+  `cgroup2` source — that false-negative bit once.
+- NOT yet done: on-board check over ttyMSM0 (plan verification step 5)
+  — QEMU covered the same three probes, but confirm once on hardware.
