@@ -403,3 +403,30 @@ CONFIG_USB_VIDEO_CLASS=m
 # --- ondemand stay built in, so switching back at runtime still works.
 # CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set
 CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y
+
+# --- sched_ext (scx) + cgroups v2 ---------------------------------------
+# Kernel 6.18.2 has sched_ext upstream (kernel/sched/ext.c). SCHED_CLASS_EXT
+# (kernel/Kconfig.preempt) depends on BPF_SYSCALL && BPF_JIT && DEBUG_INFO_BTF;
+# the first two are already =y in the arm64 arch defconfig. Mandatory set per
+# https://github.com/sched-ext/scx/blob/main/kernel.config.
+#
+# DEBUG_INFO_REDUCED must be OFF for pahole to generate BTF. The arch
+# defconfig's `CONFIG_DEBUG_INFO_REDUCED=y` line is inert only because
+# DEBUG_INFO is off today; setting DEBUG_INFO=y makes it live, so unset it
+# explicitly here (merge_config.sh last-duplicate-wins makes this stick).
+CONFIG_DEBUG_INFO=y
+# CONFIG_DEBUG_INFO_REDUCED is not set
+CONFIG_DEBUG_INFO_BTF=y
+CONFIG_BPF_JIT_ALWAYS_ON=y
+CONFIG_BPF_JIT_DEFAULT_ON=y
+CONFIG_SCHED_CLASS_EXT=y
+# cgroup v2 CPU controller: CGROUP_SCHED defaults n. FAIR_GROUP_SCHED
+# (cpu.weight) follows it by default; EXT_GROUP_SCHED (sched_ext cgroup
+# integration) defaults y once both SCHED_CLASS_EXT and CGROUP_SCHED are on.
+# CFS_BANDWIDTH adds cpu.max. All other v2 controllers (memory, io, pids,
+# cpuset, hugetlb, freezer, BPF) are already built.
+# CONFIG_CGROUPS is pinned explicitly even though it resolves on today, so a
+# future defconfig change cannot silently drop every controller.
+CONFIG_CGROUPS=y
+CONFIG_CGROUP_SCHED=y
+CONFIG_CFS_BANDWIDTH=y

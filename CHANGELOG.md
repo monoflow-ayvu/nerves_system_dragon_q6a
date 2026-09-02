@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.12.0
+
+Kernel feature enablement (sched_ext + cgroups v2). The kernel gains
+full `DEBUG_INFO`/DWARF and a BTF section; the shipped Image grows only
+by the BTF blob. OTA from any v0.6.x+ is safe — no layout, cmdline, or
+rootfs-format change.
+
+- **sched_ext (scx) support compiled in** — `CONFIG_SCHED_CLASS_EXT=y`
+  with the mandatory scx kernel.config set (`DEBUG_INFO_BTF`,
+  `BPF_JIT_ALWAYS_ON`, `BPF_JIT_DEFAULT_ON`) in
+  `linux-dragon-q6a.fragment`; `DEBUG_INFO_REDUCED` explicitly unset so
+  pahole can build BTF (the arch defconfig's inert `REDUCED=y` goes
+  live the moment `DEBUG_INFO=y`). `BR2_LINUX_KERNEL_NEEDS_HOST_PAHOLE=y`
+  added to `nerves_defconfig` so Buildroot provides host pahole.
+  `/sys/kernel/sched_ext/state` is present on target (reads `disabled`
+  until a scheduler is loaded).
+- **cgroups v2 with the CPU controller** — `CONFIG_CGROUP_SCHED=y`
+  (plus `FAIR_GROUP_SCHED`, `EXT_GROUP_SCHED`, `CFS_BANDWIDTH` for
+  `cpu.weight`/`cpu.max` and sched_ext cgroup integration) and a pure
+  v2 unified hierarchy: erlinit mounts cgroup2 at `/sys/fs/cgroup`
+  (`-m none:/sys/fs/cgroup:cgroup2:nodev,noexec,nosuid:` in
+  `rootfs_overlay/etc/erlinit.config`). `cgroup.controllers` lists
+  `cpuset cpu io memory hugetlb pids`. Nothing mounted cgroups before
+  (BR2_INIT_NONE), so this is additive.
+
 ## v0.11.1
 
 Rootfs tooling only; the kernel is unchanged from v0.10.5. OTA from
