@@ -1345,3 +1345,12 @@ Verified, all in one session:
   `cgroup2` source — that false-negative bit once.
 - NOT yet done: on-board check over ttyMSM0 (plan verification step 5)
   — QEMU covered the same three probes, but confirm once on hardware.
+
+## 2026-09-02 — DONE: v0.12.0 released (CI 33637083411 green, ~2h41m; release published with tarball, non-draft)
+
+Minor bump 0.11.1 → 0.12.0 (VERSION + CHANGELOG section rename + the
+three scx/cgroups files in one release commit fd693cd, notes commit
+e06a0ea separately). Tag pushed, CI built from scratch, tarball
+`nerves_system_dragon_q6a-portable-0.12.0-63B1237.tar.gz` attached by CI,
+undrafted via `gh release edit --draft=false`.
+Still open: on-board scx/cgroup2 confirmation over ttyMSM0.
