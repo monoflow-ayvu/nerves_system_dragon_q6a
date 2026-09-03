@@ -1,0 +1,56 @@
+From: monoflow-ayvu <dev@ayvu>
+Date: Thu, 3 Sep 2026 13:00:00 -0300
+Subject: [PATCH] uvcvideo: add bandwidth_cap module parameter
+
+The Good Penguin's out-of-tree patch, rebased on 6.18: cap the
+isochronous bandwidth a UVC device may reserve, in bytes per frame
+(0 = unlimited, the default). Cheap cameras report an inflated
+dwMaxPayloadTransferSize (often the maximum alt setting) regardless of
+the negotiated format, so the driver parks every stream at the largest
+alt setting and the host controller's periodic budget is exhausted by a
+single camera. With a cap set, alt selection picks the smallest alt
+setting that covers the cap instead — the user asserts the real
+bandwidth of the configured mode.
+
+Set at runtime:
+  echo 2400 > /sys/module/uvcvideo/parameters/bandwidth_cap
+(2400 B/frame = 153.6 Mbps), or at boot with
+uvcvideo.bandwidth_cap=2400 on the kernel command line. Inert by
+default (0 = unlimited).
+
+Signed-off-by: monoflow-ayvu <dev@ayvu>
+---
+ drivers/media/usb/uvc/uvc_video.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/drivers/media/usb/uvc/uvc_video.c b/drivers/media/usb/uvc/uvc_video.c
+index dfa1b5fe48dc..7e55c234e4e5 100644
+--- a/drivers/media/usb/uvc/uvc_video.c
++++ b/drivers/media/usb/uvc/uvc_video.c
+@@ -24,6 +24,12 @@
+ 
+ #include "uvcvideo.h"
+ 
++static unsigned int uvc_bandwidth_cap;
++module_param_named(bandwidth_cap, uvc_bandwidth_cap, uint, 0644);
++MODULE_PARM_DESC(bandwidth_cap,
++	"Cap on per-device isochronous bandwidth in bytes per frame "
++	"(0 = unlimited). Alt setting selection uses min(device-reported, cap).");
++
+ /* ------------------------------------------------------------------------
+  * UVC Controls
+  */
+@@ -2014,6 +2014,13 @@ static int uvc_video_start_transfer(struct uvc_streaming *stream,
+ 				bandwidth);
+ 		}
+ 
++		if (uvc_bandwidth_cap > 0 && bandwidth > uvc_bandwidth_cap) {
++			uvc_dbg(stream->dev, VIDEO,
++				"Capping bandwidth from %u to %u B/frame (bandwidth_cap)\n",
++				bandwidth, uvc_bandwidth_cap);
++			bandwidth = uvc_bandwidth_cap;
++		}
++
+ 		for (i = 0; i < intf->num_altsetting; ++i) {
+ 			struct usb_host_interface *alts;
+ 			unsigned int psize;
