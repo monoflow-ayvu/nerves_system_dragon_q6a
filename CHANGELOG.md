@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.13.0
+
+Kernel patch: USB DWC3 bandwidth fix for multiple UVC cameras. Pure
+kernel-patch addition — OTA from any v0.6.x+ is safe; no layout,
+cmdline, or rootfs-format change.
+
+- **DWC3: reserve higher bandwidth for HS periodic endpoints** —
+  `patches/linux/0002-usb-dwc3-reserve-higher-bandwidth-for-hs-periodic-eps.patch`
+  backports Qualcomm's LKML Feb-2025 quirk, made unconditional (the
+  Dragon Q6A's devicetree is bootloader-owned and cannot carry the
+  upstream `snps,*` quirk property, so the DT gate is dropped and
+  GUCTL bit 16 is set for every DWC3 revision >= 250A). The periodic
+  reservation relaxes from 80% to 85% of the bus, which two
+  high-bandwidth isochronous endpoints need (two 1024x3-per-microframe
+  UVC cameras ~= 82%). Fixes `VIDIOC_STREAMON` failing with ENOSPC
+  ("Not enough bandwidth for altsetting 1") when a second UVC camera
+  starts on the same QCM6490 DWC3 controller.
+
 ## v0.12.0
 
 Kernel feature enablement (sched_ext + cgroups v2). The kernel gains

@@ -1,0 +1,61 @@
+From: monoflow-ayvu <dev@ayvu>
+Date: Thu, 3 Sep 2026 12:00:00 -0300
+Subject: [PATCH] usb: dwc3: reserve higher bandwidth for HS periodic endpoints
+
+Backport of Qualcomm's LKML Feb-2025 quirk ("usb: dwc3: Reserve Higher
+Bandwidth for HS Periodic EPs"), made unconditional: the Dragon Q6A's
+devicetree is bootloader-owned and cannot carry the upstream snps,*
+quirk property, so the DT gate is dropped and the bit is set for every
+DWC3 revision >= 250A.
+
+The host controller reserves 80% of the bus for periodic endpoints by
+default; with GUCTL bit 16 set the reservation relaxes to 85%, which is
+what two high-bandwidth isochronous endpoints need (two 1024x3-per-
+microframe UVC cameras ~= 82%). Motivation: multiple UVC cameras on the
+QCM6490's DWC3 controllers failed VIDIOC_STREAMON with ENOSPC ("Not
+enough bandwidth for altsetting 1") whenever a second camera started on
+the same controller; one camera per controller worked.
+
+Signed-off-by: monoflow-ayvu <dev@ayvu>
+---
+ drivers/usb/dwc3/core.c | 15 +++++++++++++++
+ drivers/usb/dwc3/core.h |  1 +
+ 2 files changed, 16 insertions(+)
+
+diff --git a/drivers/usb/dwc3/core.h b/drivers/usb/dwc3/core.h
+index dfa1b5fe48dc..7e55c234e4e5 100644
+--- a/drivers/usb/dwc3/core.h
++++ b/drivers/usb/dwc3/core.h
+@@ -418,6 +418,7 @@
+ /* Global User Control Register*/
+ #define DWC3_GUCTL_REFCLKPER_MASK		0xffc00000
+ #define DWC3_GUCTL_REFCLKPER_SEL		22
++#define DWC3_GUCTL_RESBWHSEPS			BIT(16)
+ 
+ /* Global User Control Register 2 */
+ #define DWC3_GUCTL2_RST_ACTBITLATER		BIT(14)
+diff --git a/drivers/usb/dwc3/core.c b/drivers/usb/dwc3/core.c
+index dfa1b5fe48dc..7e55c234e4e5 100644
+--- a/drivers/usb/dwc3/core.c
++++ b/drivers/usb/dwc3/core.c
+@@ -1480,6 +1480,20 @@ static int dwc3_core_init(struct dwc3 *dwc)
+ 		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
+ 	}
+ 
++	/*
++	 * Relax the host controller's periodic-endpoint bandwidth
++	 * reservation from 80% to 85% of the bus (GUCTL bit 16): two
++	 * high-bandwidth isochronous endpoints (e.g. two UVC cameras at
++	 * 1024x3 per microframe, ~= 82%) then fit on one controller.
++	 * Set unconditionally — the upstream DT property gate is
++	 * unusable here because the devicetree is bootloader-owned.
++	 */
++	if (dwc->revision >= DWC3_REVISION_250A) {
++		reg = dwc3_readl(dwc->regs, DWC3_GUCTL);
++		reg |= DWC3_GUCTL_RESBWHSEPS;
++		dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
++	}
++
+ 	dwc3_config_threshold(dwc);
+ 
+ 	/*
