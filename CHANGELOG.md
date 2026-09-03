@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.13.1
+
+Kernel patch: UVC bandwidth cap, companion to v0.13.0's DWC3 quirk.
+Pure kernel-patch addition — OTA from any v0.6.x+ is safe; no layout,
+cmdline, or rootfs-format change.
+
+- **uvcvideo: `bandwidth_cap` module parameter** —
+  `patches/linux/0003-uvcvideo-add-bandwidth_cap-module-parameter.patch`
+  (The Good Penguin's out-of-tree patch, rebased on 6.18) caps the
+  isochronous bandwidth a UVC device may reserve, in bytes per frame
+  (0 = unlimited, the default → inert unless set). Cheap cameras
+  report an inflated `dwMaxPayloadTransferSize` regardless of the
+  negotiated format, so the driver parks every stream at the largest
+  alt setting and one camera exhausts the controller's periodic
+  budget; with a cap set, alt selection picks the smallest alt setting
+  covering the cap. Set via
+  `/sys/module/uvcvideo/parameters/bandwidth_cap` or
+  `uvcvideo.bandwidth_cap=` on the kernel cmdline.
+
 ## v0.13.0
 
 Kernel patch: USB DWC3 bandwidth fix for multiple UVC cameras. Pure
