@@ -1354,3 +1354,26 @@ e06a0ea separately). Tag pushed, CI built from scratch, tarball
 `nerves_system_dragon_q6a-portable-0.12.0-63B1237.tar.gz` attached by CI,
 undrafted via `gh release edit --draft=false`.
 Still open: on-board scx/cgroup2 confirmation over ttyMSM0.
+
+## 2026-09-03 — DONE: v0.13.0 + v0.13.1 released (UVC multi-camera bandwidth fixes; both CI green, releases published)
+
+Two same-day releases attacking the multi-UVC-camera ENOSPC problem on
+the QCM6490's DWC3 controllers from both sides:
+- v0.13.0 (release commit a6c09db): patch 0002, Qualcomm's DWC3 GUCTL
+  bit-16 quirk made unconditional (bootloader-owned DT can't carry the
+  upstream `snps,*` property) — periodic reservation 80% → 85% of bus.
+- v0.13.1 (patch commit f498135 by user, release commit 239200b):
+  patch 0003, The Good Penguin's `uvcvideo.bandwidth_cap` module
+  parameter rebased on 6.18 — caps per-device iso reservation in
+  B/frame, inert by default; set via
+  `/sys/module/uvcvideo/parameters/bandwidth_cap` or
+  `uvcvideo.bandwidth_cap=` cmdline.
+CI: v0.13.0 tag 33785230492 + main 33785234014 green; v0.13.1 tag
+33797008691 + main 33797007470 green. Build step ~2h26m each, same as
+v0.12.0 — the long monolithic "Build nerves_system" step is normal,
+not stuck. Tarballs `...-0.13.0-BE4804C.tar.gz` and
+`...-0.13.1-56734D3.tar.gz` attached by CI; both undrafted via
+`gh release edit --draft=false`.
+Still open: on-board scx/cgroup2 confirmation over ttyMSM0; on-board
+two-camera STREAMON test with 0002+0003 (with and without
+`bandwidth_cap`) on real UVC hardware.
