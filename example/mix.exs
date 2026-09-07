@@ -67,7 +67,7 @@ defmodule Example.MixProject do
       # monoflow-ayvu/ortex is public, so the plain github: form fetches over
       # unauthenticated https — which is all the CI runner has (no deploy key).
       {:ortex, github: "monoflow-ayvu/ortex", tag: @ortex_tag, override: true},
-      {:nx, "~> 0.6"},
+      {:nx, "~> 0.13"},
 
       # XLA-backed Nx. Needed because BinaryBackend evaluates elementwise and
       # transpose operations one element at a time: the image preprocessing this
