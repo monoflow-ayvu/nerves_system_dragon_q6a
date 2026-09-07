@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:26.04
 
 # Host OTP major version MUST match the target OTP built by nerves_system_br.
 # We pin the target to OTP 28 via BR2_PACKAGE_ERLANG_28=y in nerves_defconfig
