@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.14.0
+
+Busybox toolset expansion: ~90 applets on top of nerves-common's minimal
+config (`busybox.fragment`). Pure addition — no existing applet changed, no
+layout/cmdline/rootfs-format change; OTA from any v0.6.x+ is safe. busybox
+binary grows 321 → 571 KB (4 GiB rootfs partition, irrelevant).
+
+- **Text processing**: `awk` (libm), `sed`, `cut`, `tr`, `sort` (full),
+  `uniq`, `wc`, `head`, `tee`, `xargs` (all extensions), `diff` (long
+  opts, -r), `patch`, `cmp`, `strings`, `base64`, `expr`, `seq`, `md5sum`,
+  `sha1sum`.
+- **File utilities**: `ln`, `touch`, `sync`, `chown`/`chgrp` (long opts),
+  `basename`, `dirname`, `readlink` (-f), `realpath`, `stat` (`-c`, `-f`),
+  `truncate`, `mktemp`, `install`, `which`, `clear`.
+- **Process/system**: `top` (SMP %CPU, per-core, topmem), `du` (1K blocks),
+  `uname`, `hostname`, `uptime`, `watch`, `pgrep`/`pkill`, `pstree`,
+  `fuser`, `nohup`, `nice`, `vmstat`, `iostat`, `mpstat`, `pmap`, `stty`,
+  `powertop` (interactive).
+- **Archives**: `tar` (create, autodetect, GNU ext, long opts), `gzip`,
+  `gunzip`, `zcat`, `unxz`/`xzcat` + seamless xz in tar. (zstd needs
+  busybox ≥ 1.39 — not in 1.38.)
+- **Network**: `ping`/`ping6`, `traceroute`/`traceroute6`, `nslookup`,
+  `netstat` (wide, -p), `nc` (server, extra), `wget` (status bar, auth,
+  long opts, timeouts, **HTTPS via internal TLS**), prefer-IPv4 resolver,
+  verbose resolution errors.
+- **Hardware debug**: `i2cget`/`i2cset`/`i2cdetect`/`i2cdump`/
+  `i2ctransfer`, `lsusb`, `lspci`, `devmem`, `microcom`.
+- **Editors/pagers**: `vi` (colon cmds, yank/paste, search, dot-repeat,
+  :set, undo, 8-bit, resize signals), `less` (regexp, line numbers, marks).
+- **Misc**: `tc` (+ingress), `inotifyd`, `resize`, fractional `sleep`.
+- **Shell UX (ash)**: line editing, tab completion, persistent history
+  (1000 entries, `/root/.ash_history` on the writable data partition),
+  fancy prompt, Ctrl-R reverse search, WINCH, `alias`, bash compat,
+  prompt expansion, `getopts`, `$RANDOM`.
+
+Skipped deliberately: `df` was already enabled; `zstd` unavailable in
+busybox 1.38; util-linux/e2fsprogs/smartmontools/nvme-cli already provide
+their full tools (no busybox duplicates added).
+
 ## v0.13.1
 
 Kernel patch: UVC bandwidth cap, companion to v0.13.0's DWC3 quirk.
