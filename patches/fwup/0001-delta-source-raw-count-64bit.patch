@@ -1,0 +1,25 @@
+fwup: fix xdelta source window overflow with >=2 GiB partitions
+
+fwup_apply.c computes delta-source-raw-count * FWUP_BLOCK_SIZE in
+32-bit int arithmetic. A 4 GiB count (8388608 blocks) wraps the product
+to 0, the xdelta source window becomes empty, and every raw-delta decode
+fails instantly with "xdelta3 error: source file too short".
+
+Reproduced with fwup 1.15.1 against a 4 GiB rootfs partition: delta
+apply fails in <1s; with this cast the same archive applies cleanly.
+
+Upstream: https://github.com/fwup-home/fwup/issues (to be filed)
+
+diff --git a/src/fwup_apply.c b/src/fwup_apply.c
+index c1ed0f0..c506751 100644
+--- a/src/fwup_apply.c
++++ b/src/fwup_apply.c
+@@ -433,7 +433,7 @@ static int run_task(struct fun_context *fctx, struct fwup_apply_data *pd)
+                 fctx->xd = malloc(sizeof(struct xdelta_state));
+                 xdelta_init(fctx->xd, xdelta_read_patch_callback, xdelta_read_source_callback, fctx);
+                 fctx->xd_source_offset = source_raw_offset * FWUP_BLOCK_SIZE;
+-                fctx->xd_source_count = source_raw_count * FWUP_BLOCK_SIZE;
++                fctx->xd_source_count = (off_t) source_raw_count * FWUP_BLOCK_SIZE;
+                 fctx->xd_source_path = NULL;
+             } else if (source_fat_offset_str != NULL && source_fat_path != NULL) {
+                 // Found delta-source-fat-offset and delta-source-fat-path directives
