@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.15.0
+
+Add busybox `hwclock` applet (`CONFIG_HWCLOCK=y`) on top of v0.14.0's
+toolset — read/set the RTC from the shell. Pure addition; OTA-safe from
+any v0.6.x+.
+
 ## v0.14.0
 
 Busybox toolset expansion: ~90 applets on top of nerves-common's minimal
