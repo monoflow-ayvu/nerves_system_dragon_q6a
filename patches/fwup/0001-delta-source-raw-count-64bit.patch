@@ -8,7 +8,7 @@ fails instantly with "xdelta3 error: source file too short".
 Reproduced with fwup 1.15.1 against a 4 GiB rootfs partition: delta
 apply fails in <1s; with this cast the same archive applies cleanly.
 
-Upstream: https://github.com/fwup-home/fwup/issues (to be filed)
+Upstream: https://github.com/fwup-home/fwup/issues/299
 
 diff --git a/src/fwup_apply.c b/src/fwup_apply.c
 index c1ed0f0..c506751 100644
