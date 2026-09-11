@@ -1377,3 +1377,17 @@ not stuck. Tarballs `...-0.13.0-BE4804C.tar.gz` and
 Still open: on-board scx/cgroup2 confirmation over ttyMSM0; on-board
 two-camera STREAMON test with 0002+0003 (with and without
 `bandwidth_cap`) on real UVC hardware.
+
+## 2026-09-11 — DONE: v0.15.0 released (busybox hwclock; CI 34606449407 green, ~2h28m; release published, latest)
+
+Minor bump 0.14.0 → 0.15.0 (VERSION + CHANGELOG section + busybox.fragment
+in one release commit 545f89c). Change: `CONFIG_HWCLOCK=y` in
+`busybox.fragment` — RTC read/set from the shell. Checked while the build
+ran: kernel already has `CONFIG_RTC_SYSTOHC=y` + `CONFIG_RTC_HCTOSYS=y`
+(both Kconfig `default y` in radxa kernel 559f4f9, unset in defconfig and
+fragment), so the kernel syncs RTC↔system clock on boot/resume and every
+~11 min under NTP; `hwclock` is the manual path on top.
+CI: tag run 34606449407 green (build-system 2h27m54s, qemu-smoke 6m23s
+incl. A/B rollback). Tarball
+`nerves_system_dragon_q6a-portable-0.15.0-1CBF529.tar.gz` attached by CI;
+undrafted + marked latest via `gh release edit --draft=false --latest`.
