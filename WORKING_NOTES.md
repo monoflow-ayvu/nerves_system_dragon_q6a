@@ -1391,3 +1391,21 @@ CI: tag run 34606449407 green (build-system 2h27m54s, qemu-smoke 6m23s
 incl. A/B rollback). Tarball
 `nerves_system_dragon_q6a-portable-0.15.0-1CBF529.tar.gz` attached by CI;
 undrafted + marked latest via `gh release edit --draft=false --latest`.
+
+## 2026-09-11 — DONE: v0.15.2 released (fwup raw-delta overflow fix; v0.15.1 tag skipped, never released)
+
+User tagged `v0.15.1` directly on fwup patch commit 964babe (`fwup: patch
+32-bit overflow breaking all raw-delta updates` — fwup_apply.c computed
+`delta-source-raw-count * FWUP_BLOCK_SIZE` in 32-bit; 4 GiB rootfs slots
+wrap it to 0 → every NervesHub delta failed with `xdelta3 error: source
+file too short`; upstream fwup-home/fwup#299). No release commit → CI
+build+qemu-smoke green (run 34623304976) but deploy-system FAILED: the
+"Create release notes" step greps `## v0.15.1` from the built system's
+CHANGELOG.md, found nothing, exit 1 → artifact upload skipped.
+Lesson: **the tag must sit on a release commit (VERSION bump + `## vX.Y.Z`
+CHANGELOG section) or deploy always fails.** Chose to skip the broken tag:
+release commit 560db39 (VERSION 0.15.2 + changelog covering the fwup
+patch), tag v0.15.2, CI run 34636419784 green (build 2h21m31s, deploy ✓).
+Tarball `nerves_system_dragon_q6a-portable-0.15.2-89864D6.tar.gz`;
+undrafted + latest via `gh release edit --draft=false --latest`.
+Devices must take one FULL update onto ≥ v0.15.2; deltas work from then on.
