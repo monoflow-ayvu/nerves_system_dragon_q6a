@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.15.2
+
+**Fix broken raw-delta (NervesHub delta) updates on 4 GiB rootfs slots.**
+Patch vendored fwup 1.15.1 (`patches/fwup/
+0001-delta-source-raw-count-64bit.patch`, upstream fwup-home/fwup#299):
+`fwup_apply.c` computed `delta-source-raw-count * FWUP_BLOCK_SIZE` in
+32-bit arithmetic; the 4 GiB slots (v0.6.0) wrap the product to 0, so
+every delta apply failed instantly with `xdelta3 error: source file too
+short`. Devices must take one FULL update onto ≥ v0.15.2; deltas work
+from then on.
+
+(Tag `v0.15.1` pointed at the pre-release fwup commit without
+VERSION/CHANGELOG and never produced a release — superseded by this one.)
+
 ## v0.15.0
 
 Add busybox `hwclock` applet (`CONFIG_HWCLOCK=y`) on top of v0.14.0's
