@@ -72,7 +72,7 @@ defmodule Example.MixProject do
       # XLA-backed Nx. Needed because BinaryBackend evaluates elementwise and
       # transpose operations one element at a time: the image preprocessing this
       # replaces took 9.0 s per frame through it.
-      {:exla, "~> 0.13"},
+      {:exla, "~> 1.0"},
 
       # JPEG/PNG decoding and resizing for Example.Yolo. A C NIF (stb_image.h),
       # no libjpeg/libpng needed on the target. cc_precompiler picks the
