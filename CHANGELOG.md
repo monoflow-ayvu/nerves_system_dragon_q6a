@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.3
+
+Debug/peripheral toolset addition. Pure addition; OTA-safe from any
+v0.6.x+.
+
+- Userspace: `i2c-tools` (`i2cdetect`/`i2cget`/`i2cset`/`i2cdump`),
+  `libgpiod` tools (`gpiodetect`, `gpioget`, `gpioset`, …), `dtc` +
+  `fdtdump`, `strace`, `ethtool`, `tcpdump`.
+- Kernel: `CONFIG_OF_CONFIGFS=y` (+ pinned `CONFIG_CONFIGFS_FS=y`) —
+  runtime device-tree overlay loading via `/config/device-tree`.
+
 ## v0.15.2
 
 **Fix broken raw-delta (NervesHub delta) updates on 4 GiB rootfs slots.**
