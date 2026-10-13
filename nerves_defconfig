@@ -103,6 +103,17 @@ BR2_PACKAGE_NVME=y
 BR2_PACKAGE_SMARTMONTOOLS=y
 BR2_PACKAGE_UTIL_LINUX_BINARIES=y
 BR2_PACKAGE_CA_CERTIFICATES=y
+
+# --- Debug / peripheral tools ---
+BR2_PACKAGE_I2C_TOOLS=y
+BR2_PACKAGE_LIBGPIOD_TOOLS=y
+# BR2_PACKAGE_DTC alone ships only libfdt; DTC_PROGRAMS is what installs the
+# dtc/fdtdump binaries.
+BR2_PACKAGE_DTC=y
+BR2_PACKAGE_DTC_PROGRAMS=y
+BR2_PACKAGE_STRACE=y
+BR2_PACKAGE_ETHTOOL=y
+BR2_PACKAGE_TCPDUMP=y
 # BR2_TARGET_ROOTFS_TAR is not set
 BR2_TARGET_GRUB2=y
 BR2_TARGET_GRUB2_BUILTIN_MODULES_EFI="boot linux fdt ext2 fat squash4 part_gpt part_msdos normal efi_gop loadenv echo test true search configfile regexp probe"
