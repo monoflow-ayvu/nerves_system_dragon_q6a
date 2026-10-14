@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.4
+
+**Fix v0.15.3's DT-overlay configfs support — it never existed.**
+`CONFIG_OF_CONFIGFS` is not a mainline symbol: it lives only in
+downstream trees, so the fragment line was silently dropped by
+olddefconfig and `/sys/kernel/config/device-tree` never appeared.
+Carry Raspberry Pi's downstream `drivers/of/configfs.c` (from
+`rpi-6.18.y`, same 6.18 base) as `patches/linux/0004`. Overlay loading:
+`mkdir /sys/kernel/config/device-tree/overlays/foo`, write the `.dtbo`
+to its `dtbo` attribute, `echo 1 > status`.
+
 ## v0.15.3
 
 Debug/peripheral toolset addition. Pure addition; OTA-safe from any
@@ -9,7 +20,9 @@ v0.6.x+.
   `libgpiod` tools (`gpiodetect`, `gpioget`, `gpioset`, …), `dtc` +
   `fdtdump`, `strace`, `ethtool`, `tcpdump`.
 - Kernel: `CONFIG_OF_CONFIGFS=y` (+ pinned `CONFIG_CONFIGFS_FS=y`) —
-  runtime device-tree overlay loading via `/config/device-tree`.
+  intended runtime DT-overlay loading via `/config/device-tree`, but
+  the symbol doesn't exist in mainline and was silently dropped.
+  Actually delivered in v0.15.4.
 
 ## v0.15.2
 
