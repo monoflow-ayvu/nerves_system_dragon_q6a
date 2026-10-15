@@ -79,7 +79,7 @@ defmodule Example.MixProject do
       # aarch64-linux-gnu artifact for this target, which needs only GLIBC_2.17
       # and links nothing but libc - so it drops straight into the firmware and
       # no source cross-compile is required.
-      {:stb_image, "~> 0.6"},
+      {:stb_image, "~> 1.0"},
 
       # Allow Nerves.Runtime on host for dev/test.
       {:nerves_runtime, "~> 0.13"},
