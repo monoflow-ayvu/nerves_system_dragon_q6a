@@ -67,7 +67,12 @@ defmodule Example.MixProject do
       # monoflow-ayvu/ortex is public, so the plain github: form fetches over
       # unauthenticated https — which is all the CI runner has (no deploy key).
       {:ortex, github: "monoflow-ayvu/ortex", tag: @ortex_tag, override: true},
-      {:nx, "~> 0.6"},
+      # ortex v0.2.0-rc.2 still declares nx ~> 0.10 (upstream ortex is even
+      # older). nx 1.0's breaking changes are defn/compiler internals
+      # (tokens → io_call, buffer donation); ortex only touches
+      # argmax/as_type/backend_transfer/broadcast/shape/size + Nx.Serving,
+      # which are unchanged — verified by compiling ortex against nx 1.0.0.
+      {:nx, "~> 1.0", override: true},
 
       # XLA-backed Nx. Needed because BinaryBackend evaluates elementwise and
       # transpose operations one element at a time: the image preprocessing this
@@ -78,8 +83,9 @@ defmodule Example.MixProject do
       # no libjpeg/libpng needed on the target. cc_precompiler picks the
       # aarch64-linux-gnu artifact for this target, which needs only GLIBC_2.17
       # and links nothing but libc - so it drops straight into the firmware and
-      # no source cross-compile is required.
-      {:stb_image, "~> 0.6"},
+      # no source cross-compile is required. 1.0 is required for nx 1.0
+      # (0.6.x caps nx below 1.0).
+      {:stb_image, "~> 1.0"},
 
       # Allow Nerves.Runtime on host for dev/test.
       {:nerves_runtime, "~> 0.13"},
