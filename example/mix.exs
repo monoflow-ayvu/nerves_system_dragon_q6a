@@ -14,10 +14,10 @@ defmodule Example.MixProject do
   @version "0.1.0"
   @all_targets [:dragon_q6a]
 
-  # github.com/monoflow-ayvu/ortex v0.2.0-rc.2 — has rustler_precompiled
-  # wiring, so CI (no cargo on the runner) fetches the prebuilt NIF from the
-  # release instead of compiling the crate.
-  @ortex_tag "v0.2.0-rc.2"
+  # github.com/monoflow-ayvu/ortex v0.3.1 — rustler_precompiled wiring, so
+  # CI (no cargo on the runner) fetches the prebuilt NIF from the release
+  # instead of compiling the crate. Declares nx ~> 1.0 natively since v0.3.x.
+  @ortex_tag "v0.3.1"
 
   def project do
     [
@@ -67,12 +67,7 @@ defmodule Example.MixProject do
       # monoflow-ayvu/ortex is public, so the plain github: form fetches over
       # unauthenticated https — which is all the CI runner has (no deploy key).
       {:ortex, github: "monoflow-ayvu/ortex", tag: @ortex_tag, override: true},
-      # ortex v0.2.0-rc.2 still declares nx ~> 0.10 (upstream ortex is even
-      # older). nx 1.0's breaking changes are defn/compiler internals
-      # (tokens → io_call, buffer donation); ortex only touches
-      # argmax/as_type/backend_transfer/broadcast/shape/size + Nx.Serving,
-      # which are unchanged — verified by compiling ortex against nx 1.0.0.
-      {:nx, "~> 1.0", override: true},
+      {:nx, "~> 1.0"},
 
       # XLA-backed Nx. Needed because BinaryBackend evaluates elementwise and
       # transpose operations one element at a time: the image preprocessing this
