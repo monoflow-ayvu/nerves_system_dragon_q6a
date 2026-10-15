@@ -14,10 +14,10 @@ defmodule Example.MixProject do
   @version "0.1.0"
   @all_targets [:dragon_q6a]
 
-  # github.com/monoflow-ayvu/ortex v0.2.0-rc.2 — has rustler_precompiled
-  # wiring, so CI (no cargo on the runner) fetches the prebuilt NIF from the
-  # release instead of compiling the crate.
-  @ortex_tag "v0.2.0-rc.2"
+  # github.com/monoflow-ayvu/ortex v0.3.1 — rustler_precompiled wiring, so
+  # CI (no cargo on the runner) fetches the prebuilt NIF from the release
+  # instead of compiling the crate. Declares nx ~> 1.0 natively since v0.3.x.
+  @ortex_tag "v0.3.1"
 
   def project do
     [
@@ -67,19 +67,20 @@ defmodule Example.MixProject do
       # monoflow-ayvu/ortex is public, so the plain github: form fetches over
       # unauthenticated https — which is all the CI runner has (no deploy key).
       {:ortex, github: "monoflow-ayvu/ortex", tag: @ortex_tag, override: true},
-      {:nx, "~> 0.6"},
+      {:nx, "~> 1.0"},
 
       # XLA-backed Nx. Needed because BinaryBackend evaluates elementwise and
       # transpose operations one element at a time: the image preprocessing this
       # replaces took 9.0 s per frame through it.
-      {:exla, "~> 0.13"},
+      {:exla, "~> 1.0"},
 
       # JPEG/PNG decoding and resizing for Example.Yolo. A C NIF (stb_image.h),
       # no libjpeg/libpng needed on the target. cc_precompiler picks the
       # aarch64-linux-gnu artifact for this target, which needs only GLIBC_2.17
       # and links nothing but libc - so it drops straight into the firmware and
-      # no source cross-compile is required.
-      {:stb_image, "~> 0.6"},
+      # no source cross-compile is required. 1.0 is required for nx 1.0
+      # (0.6.x caps nx below 1.0).
+      {:stb_image, "~> 1.0"},
 
       # Allow Nerves.Runtime on host for dev/test.
       {:nerves_runtime, "~> 0.13"},
