@@ -5,6 +5,12 @@ BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
 BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
 BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/nerves-project/toolchains/releases/download/v15.3.0/nerves_toolchain_aarch64_nerves_linux_gnu-linux_${shell uname -m}-15.3.0-8DAF9F3.tar.xz"
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="aarch64-nerves-linux-gnu"
+# Pin the expected gcc major: Buildroot's default tracks the newest gcc it
+# knows (15 in 2026.05, 16 in 2026.08), so an unpinned choice breaks the
+# toolchain check whenever nerves_system_br bumps Buildroot past our
+# toolchain's gcc. nerves-systems upstream (rpi5 on BR 1.35.x) pins the
+# same way. Bump together with the toolchain URL above.
+BR2_TOOLCHAIN_EXTERNAL_GCC_15=y
 BR2_TOOLCHAIN_EXTERNAL_HEADERS_6_0=y
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM_GLIBC=y
 # BR2_TOOLCHAIN_EXTERNAL_INET_RPC is not set
