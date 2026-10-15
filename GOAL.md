@@ -96,9 +96,9 @@ be validated *without* the board must be validated here first.
 
 | Component | Version / pin |
 | --- | --- |
-| nerves_system_br | 1.34.0 (Buildroot 2026.05) |
+| nerves_system_br | 1.35.1 (Buildroot 2026.08) |
 | Toolchain | nerves_toolchain_aarch64_nerves_linux_gnu 15.3.0 (glibc) |
-| Erlang/OTP (target+host) | 28 (28.5.0.2) / Elixir 1.19.5 |
+| Erlang/OTP | target 29.1.1 (from nerves_system_br 1.35.1); host bench image pins 28.5.0.2 (Dockerfile) / CI 28.0.1 — tolerated drift, bytecode compiled on OTP 28 loads on 29 |
 | Kernel | `radxa/kernel` branch `linux-6.18.2` @ `559f4f921a01e5358602153364c618fe2a3e431e` (6.18.2 + ~70 Radxa board commits; the tree the proven Yocto system uses). Was Deka `linux-dragon-q6a` @ `e05c4fa` until the B7 switch — see PORTING-FROM-YOCTO.md |
 | DTB | `qcom/qcs6490-radxa-dragon-q6a` (in-tree; includes mainline `sc7280.dtsi`, carries CDSP/ADSP remoteproc + `qcom,fastrpc` glink nodes) |
 | DSP shell | linux-msm/hexagon-dsp-binaries @ `2ba83638…` → `qcs6490/radxa/dragon-q6a/CDSP.HT.2.5.c4-00004-KODIAK-1` (CDSP) + `ADSP.HT.5.5.c9-00028-KODIAK-2` (ADSP) |
