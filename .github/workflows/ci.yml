@@ -4,7 +4,7 @@ on: [push]
 
 env:
   OTP_VERSION: 28.0.1
-  ELIXIR_VERSION: 1.18.4-otp-28
+  ELIXIR_VERSION: 1.20.4-otp-28
   NERVES_BOOTSTRAP_VERSION: 1.13.1
   FWUP_VERSION: 1.16.0  # matches Dockerfile and the target fwup; fwup.conf requires >= 1.14.0
 
