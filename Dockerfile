@@ -2,8 +2,8 @@ FROM ubuntu:22.04
 
 # Host OTP major version MUST match the target OTP built by nerves_system_br.
 # We pin the target to OTP 29 via BR2_PACKAGE_ERLANG_29=y in nerves_defconfig
-# (29.0.2), so the container uses OTP 29 as well.
-ARG OTP_VERSION=29.0.2
+# (29.1.2), so the container uses OTP 29 as well.
+ARG OTP_VERSION=29.1.2
 ARG ELIXIR_VERSION=1.20.4
 # 1.14.0 is the floor: "U-Boot environment blocks can now be written to offsets
 # beyond 2 GB". Our env block is at LBA 64 so we do not hit that today, but the
