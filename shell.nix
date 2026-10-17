@@ -4,7 +4,7 @@ let
   # nerves_defconfig); the host OTP major must match when building Nerves
   # applications against this system.
   otp = beam28Packages;
-  elixir = if builtins.hasAttr "elixir_1_19" otp then otp.elixir_1_19 else otp.elixir;
+  elixir = if builtins.hasAttr "elixir_1_20" otp then otp.elixir_1_20 else if builtins.hasAttr "elixir_1_19" otp then otp.elixir_1_19 else otp.elixir;
 
   basePackages = [
     elixir
