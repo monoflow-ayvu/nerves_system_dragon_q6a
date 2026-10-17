@@ -110,9 +110,10 @@ jobs:
 
   qemu-smoke:
     needs: [build-system]
-    # 24.04 ships QEMU 8.2 (22.04 = 6.2, whose distorted TCG clock stalls
-    # nerves_runtime's app-partition format and made the app banner check
-    # non-fatal — see test/qemu-smoke.sh).
+    # 26.04 ships QEMU 10.2 (24.04 = 8.2; 22.04 = 6.2, whose distorted TCG
+    # clock stalled nerves_runtime's app-partition format and made the app
+    # banner check non-fatal — see test/qemu-smoke.sh). ubuntu-22.04 hosted
+    # runners are retired, so 26.04 is the floor now.
     runs-on: ubuntu-26.04
     # Force the Nerves download dir to a known path (default is XDG-dependent:
     # $XDG_DATA_HOME/nerves/dl or ~/.nerves/dl). We seed the prebuilt tarball
