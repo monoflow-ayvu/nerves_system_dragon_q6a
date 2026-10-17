@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.16.0
+
+**nerves_system_br 1.34.0 → 1.35.1: Buildroot 2026.05 → 2026.08, OTP
+29.0.2 → 29.1.1.** Full-image OTA from v0.15.x works; raw-delta updates
+will be large (most of the rootfs changed with the Buildroot major), so
+expect near-full-size deltas for this hop.
+
+- Toolchain unchanged (nerves_toolchain 15.3.0); the expected gcc major
+  is now pinned explicitly (`BR2_TOOLCHAIN_EXTERNAL_GCC_15=y`) because
+  Buildroot 2026.08 defaults it to 16.
+- fwup 1.16.0 → 1.17.0 (via Buildroot): upstreams our vendored
+  raw-delta 64-bit overflow fix (fwup-home/fwup#299), so
+  `patches/fwup/0001` is dropped.
+- Turnip (freedreno Vulkan) is a native Buildroot symbol since 2026.08;
+  the external-tree Kconfig/meson shim is removed. Same driver, same
+  ICD path (`/usr/share/vulkan/icd.d/freedreno_icd.*.json`); mesa ≥ 26
+  defaults freedreno-kmds to msm.
+- Erlang/OTP 29.1.1: security and bug-fix release line (29.0.2 →
+  29.1.1). Bytecode compiled on OTP 28 hosts still loads.
+- Example app: nx 0.13 → 1.0, exla 0.13 → 1.0 (xla unchanged at
+  0.10.0), ortex v0.2.0-rc.2 → v0.3.1 (native nx 1.0 support),
+  stb_image 0.6 → 1.0. qemu-smoke green; on-hardware inference bench
+  pending.
+- Dev-only: ex_doc constraint ~> 0.22 → ~> 0.40.
+
+## v0.15.4
+
+**Fix v0.15.3's DT-overlay configfs support — it never existed.**
+`CONFIG_OF_CONFIGFS` is not a mainline symbol: it lives only in
+downstream trees, so the fragment line was silently dropped by
+olddefconfig and `/sys/kernel/config/device-tree` never appeared.
+Carry Raspberry Pi's downstream `drivers/of/configfs.c` (from
+`rpi-6.18.y`, same 6.18 base) as `patches/linux/0004`. Overlay loading:
+`mkdir /sys/kernel/config/device-tree/overlays/foo`, write the `.dtbo`
+to its `dtbo` attribute, `echo 1 > status`.
+
+## v0.15.3
+
+Debug/peripheral toolset addition. Pure addition; OTA-safe from any
+v0.6.x+.
+
+- Userspace: `i2c-tools` (`i2cdetect`/`i2cget`/`i2cset`/`i2cdump`),
+  `libgpiod` tools (`gpiodetect`, `gpioget`, `gpioset`, …), `dtc` +
+  `fdtdump`, `strace`, `ethtool`, `tcpdump`.
+- Kernel: `CONFIG_OF_CONFIGFS=y` (+ pinned `CONFIG_CONFIGFS_FS=y`) —
+  intended runtime DT-overlay loading via `/config/device-tree`, but
+  the symbol doesn't exist in mainline and was silently dropped.
+  Actually delivered in v0.15.4.
+
 ## v0.15.2
 
 **Fix broken raw-delta (NervesHub delta) updates on 4 GiB rootfs slots.**

@@ -430,3 +430,10 @@ CONFIG_SCHED_CLASS_EXT=y
 CONFIG_CGROUPS=y
 CONFIG_CGROUP_SCHED=y
 CONFIG_CFS_BANDWIDTH=y
+
+# --- Device-tree overlays via configfs -------------------------------
+# Exposes /config/device-tree for runtime DT overlay loading. OF is
+# always on for arm64; CONFIGFS_FS is pinned explicitly so a future
+# defconfig change can't silently drop the configfs mount.
+CONFIG_CONFIGFS_FS=y
+CONFIG_OF_CONFIGFS=y
