@@ -1,10 +1,10 @@
 with import <nixpkgs> { };
 let
-  # The target is pinned to OTP 28 (BR2_PACKAGE_ERLANG_28=y in
+  # The target is pinned to OTP 29 (BR2_PACKAGE_ERLANG_29=y in
   # nerves_defconfig); the host OTP major must match when building Nerves
   # applications against this system.
-  otp = beam28Packages;
-  elixir = if builtins.hasAttr "elixir_1_19" otp then otp.elixir_1_19 else otp.elixir;
+  otp = beam29Packages;
+  elixir = if builtins.hasAttr "elixir_1_20" otp then otp.elixir_1_20 else otp.elixir;
 
   basePackages = [
     elixir

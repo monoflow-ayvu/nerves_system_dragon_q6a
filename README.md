@@ -204,7 +204,7 @@ Note: the kernel gets its DTB from the EDK2 firmware via EFI (see
 ## Building
 
 Host is assumed to be non-FHS (NixOS); the system builds inside a Docker
-build runner (`Dockerfile`, OTP 28 to match `BR2_PACKAGE_ERLANG_28=y`).
+build runner (`Dockerfile`, OTP 29 to match `BR2_PACKAGE_ERLANG_29=y`).
 
 ```sh
 mix deps.get
