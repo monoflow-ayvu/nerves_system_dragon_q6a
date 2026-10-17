@@ -1,10 +1,10 @@
 FROM ubuntu:22.04
 
 # Host OTP major version MUST match the target OTP built by nerves_system_br.
-# We pin the target to OTP 28 via BR2_PACKAGE_ERLANG_28=y in nerves_defconfig
-# (28.5.0.2), so the container uses OTP 28 as well.
-ARG OTP_VERSION=28.5.0.2
-ARG ELIXIR_VERSION=1.19.5
+# We pin the target to OTP 29 via BR2_PACKAGE_ERLANG_29=y in nerves_defconfig
+# (29.0.2), so the container uses OTP 29 as well.
+ARG OTP_VERSION=29.0.2
+ARG ELIXIR_VERSION=1.20.4
 # 1.14.0 is the floor: "U-Boot environment blocks can now be written to offsets
 # beyond 2 GB". Our env block is at LBA 64 so we do not hit that today, but the
 # app partition already starts at 4.25 GiB, so a future layout change easily
@@ -41,10 +41,10 @@ RUN wget -q https://github.com/erlang/otp/releases/download/OTP-${OTP_VERSION}/o
     make install && \
     cd .. && rm -rf otp_src_${OTP_VERSION} otp_src_${OTP_VERSION}.tar.gz
 
-# Elixir (precompiled for OTP 28)
-RUN wget -q https://github.com/elixir-lang/elixir/releases/download/v${ELIXIR_VERSION}/elixir-otp-28.zip && \
-    unzip -q -d /usr/local elixir-otp-28.zip && \
-    rm elixir-otp-28.zip
+# Elixir (precompiled for OTP 29)
+RUN wget -q https://github.com/elixir-lang/elixir/releases/download/v${ELIXIR_VERSION}/elixir-otp-29.zip && \
+    unzip -q -d /usr/local elixir-otp-29.zip && \
+    rm elixir-otp-29.zip
 
 # fwup (used on the host side of the build; Buildroot builds its own host-fwup
 # too, but having it in PATH helps debugging)

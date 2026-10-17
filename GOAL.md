@@ -50,7 +50,7 @@ be validated *without* the board must be validated here first.
 - [x] Example app in `example/` builds a `.fw` (67 MB).
 - [x] **QEMU smoke test passes** (`test/qemu-smoke.sh`): EDK2 aarch64 →
       GRUB (BOOTAA64.EFI, slot A from grubenv) → kernel 6.18 out of
-      squashfs → erlinit → **IEx prompt** (Elixir 1.19.5 / OTP 28) on
+      squashfs → erlinit → **IEx prompt** (Elixir 1.20.4 / OTP 29) on
       ttyAMA0. App-data partition auto-formats + mounts r/w on first boot
       (Nerves.Runtime.Init). All 5 checks PASS.
 - [x] rootfs carries the NPU file map (firmware path, /usr/lib/dsp shells,
@@ -87,8 +87,8 @@ be validated *without* the board must be validated here first.
   identical to orangepi6/x86_64 model. No nerves_initramfs.
 - **Provisioning KV store:** fwup uboot-env block at LBA 64 (raw region,
   not a partition), same as orangepi6.
-- **Docker build runner** (host is NixOS): `Dockerfile` pins OTP 28 +
-  Elixir to match `BR2_PACKAGE_ERLANG_28=y`.
+- **Docker build runner** (host is NixOS): `Dockerfile` pins OTP 29 +
+  Elixir to match `BR2_PACKAGE_ERLANG_29=y`.
 - **QEMU:** same kernel binary boots `-M virt` via virtio (config adds
   virtio) - full-chain validation without the board.
 
@@ -98,7 +98,7 @@ be validated *without* the board must be validated here first.
 | --- | --- |
 | nerves_system_br | 1.34.0 (Buildroot 2026.05) |
 | Toolchain | nerves_toolchain_aarch64_nerves_linux_gnu 15.3.0 (glibc) |
-| Erlang/OTP (target+host) | 28 (28.5.0.2) / Elixir 1.19.5 |
+| Erlang/OTP (target+host) | 29 (29.0.2) / Elixir 1.20.4 |
 | Kernel | `radxa/kernel` branch `linux-6.18.2` @ `559f4f921a01e5358602153364c618fe2a3e431e` (6.18.2 + ~70 Radxa board commits; the tree the proven Yocto system uses). Was Deka `linux-dragon-q6a` @ `e05c4fa` until the B7 switch — see PORTING-FROM-YOCTO.md |
 | DTB | `qcom/qcs6490-radxa-dragon-q6a` (in-tree; includes mainline `sc7280.dtsi`, carries CDSP/ADSP remoteproc + `qcom,fastrpc` glink nodes) |
 | DSP shell | linux-msm/hexagon-dsp-binaries @ `2ba83638…` → `qcs6490/radxa/dragon-q6a/CDSP.HT.2.5.c4-00004-KODIAK-1` (CDSP) + `ADSP.HT.5.5.c9-00028-KODIAK-2` (ADSP) |
